@@ -1,4 +1,4 @@
-{% extends 'base.html' %}{% block content %}
+{% extends 'base.html' %}{% block content %}{% set direct = user is defined and user.role in ('manager','admin') %}
 {% if days is not defined %}
 <section class="card"><h1>This form is temporarily unavailable.</h1><p>Please refresh the page in a moment. If the problem continues, contact your administrator.</p></section>
 {% else %}
@@ -11,7 +11,7 @@
 <noscript><p class="error">Enable JavaScript to check your hours and submit this form. Your entries must meet the requirements shown above.</p></noscript>
 <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="weekly">
 <div class="form-step"><span>1</span><h2>When should these hours start?</h2></div><label class="start-date">Start date<input type="date" name="effective_date" id="effective-date" min="{{ earliest }}" max="{{ latest }}" value="{{ effective_date }}" aria-describedby="weekly-feedback" required></label>
-<p class="muted">Your current approved hours continue until this date. Submitting a request does not change them; manager approval is required.</p>
+<p class="muted">Your current approved hours continue until this date. {% if direct %}Your new hours are saved without another manager’s approval.{% else %}Submitting a request does not change them; manager approval is required.{% endif %}</p>
 <div class="form-step"><span>2</span><h2>Set your available hours</h2></div><p class="muted">Choose hours, all day, or no hours for each day below.</p><div class="weekly-editor">
 {% for day in days %}{% set i = loop.index0 %}{% set hours = defaults[i] %}
 <fieldset class="day-row" data-day="{{ day }}"><legend>{{ day }}</legend>
@@ -25,7 +25,7 @@
 {% endfor %}
 <p class="day-error error" id="day-{{ i }}-error" hidden></p></fieldset>{% endfor %}</div>
 <p class="muted">From/To apply when “Enter hours” is selected. Times use {{ cfg.business_timezone }}. Choose times from 5:00 AM to 11:00 PM in 15-minute steps, with To later than From. “No hours” means you cannot work that day.</p>
-<div class="form-step"><span>3</span><h2>Send for approval</h2></div><label>Anything your manager should know? (optional)<textarea name="employee_note" maxlength="2000" rows="3">{{ employee_note }}</textarea></label>
+<div class="form-step"><span>3</span><h2>{{ 'Save availability' if direct else 'Send for approval' }}</h2></div><label>{{ 'Note (optional)' if direct else 'Anything your manager should know? (optional)' }}<textarea name="employee_note" maxlength="2000" rows="3">{{ employee_note }}</textarea></label>
 <div id="weekly-feedback" class="validation-feedback" aria-live="polite" aria-atomic="true"><p id="weekly-credit"></p><p id="weekly-errors">Choose a start date and enter your availability to continue.</p></div>
-<div class="form-actions"><button id="weekly-submit" disabled>{{ "Request limit reached" if usage.blocked else "Send to my manager" }}</button><a href="/availability">Cancel</a></div><p class="muted">Your hours change only after your manager approves.</p>
+<div class="form-actions"><button id="weekly-submit" disabled>{{ "Request limit reached" if usage.blocked else ("Save my availability" if direct else "Send to my manager") }}</button><a href="/availability">Cancel</a></div><p class="muted">{% if direct %}No additional approval is required. Your new hours start on the selected date.{% else %}Your hours change only after your manager approves.{% endif %}</p>
 </form><script src="/static/weekly-form.js" defer></script>{% endif %}{% endblock %}

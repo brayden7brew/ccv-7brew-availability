@@ -98,3 +98,11 @@ not eligible. Completed creations are kept, not repeated. This continuation
 performs live deletions before the remaining creates, so a later failure can
 leave a partial schedule. It journals the revised order and refuses a second
 continuation; only a verified complete final state is marked applied.
+
+### Manager availability
+
+Managers and administrators submit their own weekly hours directly through the
+normal journaled approval/write flow. Employee submissions remain pending for
+a scoped manager. Direct submissions do not queue review-request emails; their
+confirmation distinguishes acceptance from verified WIW delivery. Existing date,
+minimum-hours, request-limit, dry-run, and unresolved-write checks still apply.

@@ -26,8 +26,10 @@ def decide(db, actor, change_id, decision, note, provider=None, replace_existing
     existing = db.get(Change, change_id)
     if not existing or not allowed(db, actor, existing):
         raise HTTPException(404, 'Request not found.')
-    if actor.role not in ('manager', 'admin') or actor.id == existing.employee_id:
-        raise HTTPException(403, 'A different authorized manager must decide this request.')
+    if not actor.active or actor.role not in ('manager', 'admin'):
+        raise HTTPException(403, 'An authorized manager must decide this request.')
+    if actor.id == existing.employee_id and decision != 'approve':
+        raise HTTPException(403, 'You cannot reject your own availability.')
     employee = db.scalar(select(User).where(User.id == existing.employee_id).with_for_update())
     change = db.scalar(select(Change).where(Change.id == change_id).with_for_update().execution_options(populate_existing=True))
     if change.status != 'pending':

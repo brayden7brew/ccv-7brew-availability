@@ -28,7 +28,11 @@ def enqueue_notifications(db, change, event):
         subject='Your availability request was approved' if approved else 'Your availability request was declined'
         text=f'Hi {employee.name},\n\nYour weekly availability request has been {"approved" if approved else "declined"}.'
         if approved:
-            text+='\nThis confirms the manager decision. Open the request to check the When I Work sync status.'
+            if change.manager_id == change.employee_id:
+                subject='Your availability update was accepted'
+                text=f'Hi {employee.name},\n\nYour availability update was accepted without additional approval. Open the request to check the When I Work sync status.'
+            else:
+                text+='\nThis confirms the manager decision. Open the request to check the When I Work sync status.'
             if change.dry_run: text+='\nThis was a test approval; When I Work was not changed.'
         if change.manager_note: text+=f'\n\nManager note: {change.manager_note}'
     link=cfg.public_base_url.rstrip('/')+f'/requests/{change.id}'

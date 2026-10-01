@@ -254,6 +254,9 @@ async def submit(request: Request, db=Depends(get_db)):
         applied_rules=validate_employee_rules(db,user,data)
     except HTTPException as exc:
         return invalid(exc.detail, exc.status_code)
+    if user.role in ('manager','admin') and db.scalar(select(Change.id).where(
+            Change.employee_id == user.id, Change.status.in_(['applying','needs_reconciliation']))):
+        return invalid('An earlier availability update needs attention. Ask your administrator to resolve it before saving another update.', 409)
     usage = request_usage(db, user.id)
     if usage['blocked']:
         return invalid(f"You have reached the limit of {usage['limit']} requests in 30 days. You can submit again at {local_datetime(usage['reset'])}.", 429)
@@ -285,8 +288,11 @@ async def submit(request: Request, db=Depends(get_db)):
     db.add(change)
     db.flush()
     user.first_request_notice_exception=False
-    audit(db, change, user, 'submitted', {'before':before, 'proposed':change.proposed, 'action':'weekly','rules':applied_rules})
+    direct = user.role in ('manager', 'admin')
+    audit(db, change, user, 'submitted_direct' if direct else 'submitted', {'before':before, 'proposed':change.proposed, 'action':'weekly','rules':applied_rules})
     db.commit()
+    if direct:
+        await run_in_threadpool(decide, db, user, change.id, 'approve', '', WIW())
     return RedirectResponse(f'/requests/{change.id}', 303)
 
 @app.get('/requests/{change_id}')
