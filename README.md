@@ -67,7 +67,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 - Employees enter weekly available hours and view their current/upcoming approved schedules and request history. Managers compare weekly schedules side by side and approve or reject with notes.
 - A different, location-authorized manager must approve. Rejections require a reason. A rejection or pending request does not end the existing weekly schedule.
-- One start date, no end date or repeat count. Each day is a time window, all-day availability, or no hours. Overnight windows must be split across days; an end time of midnight means the end of that day.
+- One start date, no end date or repeat count. Each day is a time window, all-day availability, or no hours. The From/To dropdowns offer 5:00 AM through 11:00 PM in 15-minute increments. All-day availability remains a separate choice. Existing saved schedules, including midnight end times, remain readable.
 - Each approval rebuilds only portal-managed WIW availability events for today onward. Earlier snapshots and approved schedules remain in the portal audit. WIW itself may no longer show historical occurrences of replaced recurring series. The current pattern is capped before the next approved start date; the latest repeats indefinitely.
 - WIW has unavailable/preferred events, not a plain available type. The adapter marks the complement of the submitted hours unavailable, leaving entered hours open. Employees never select WIW event types.
 - Weekly writes are a journaled multi-call batch. Approval and each operation intent are committed before dispatch, with successful responses recorded individually. Any uncertain/partial batch blocks further approvals and requires read-only reconciliation. No automatic retries.

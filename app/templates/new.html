@@ -14,10 +14,15 @@
 {% for day in days %}{% set i = loop.index0 %}{% set hours = defaults[i] %}
 <fieldset class="day-row"><legend>{{ day }}</legend>
 <label>Availability<select name="day_{{ i }}_mode" aria-label="{{ day }} availability"><option value="hours" {% if hours.mode == 'hours' %}selected{% endif %}>Enter hours</option><option value="all_day" {% if hours.mode == 'all_day' %}selected{% endif %}>Available all day</option><option value="none" {% if hours.mode == 'none' %}selected{% endif %}>No hours this day</option></select></label>
-<label>From<input type="time" name="day_{{ i }}_start" value="{{ hours.start }}" aria-label="{{ day }} available from"></label>
-<label>To<input type="time" name="day_{{ i }}_end" value="{{ hours.end }}" aria-label="{{ day }} available to"></label>
+{% for field, label in [('start', 'From'), ('end', 'To')] %}
+<label>{{ label }}<select name="day_{{ i }}_{{ field }}" aria-label="{{ day }} available {{ label|lower }}">
+<option value="">Choose time</option>
+{% for minute in range(300, 1381, 15) %}{% set hour = minute // 60 %}{% set value = '%02d:%02d'|format(hour, minute % 60) %}
+<option value="{{ value }}" {% if hours[field] == value %}selected{% endif %}>{{ hour % 12 or 12 }}:{{ '%02d'|format(minute % 60) }} {{ 'AM' if hour < 12 else 'PM' }}</option>
+{% endfor %}</select></label>
+{% endfor %}
 </fieldset>{% endfor %}</div>
-<p class="muted">From/To apply when “Enter hours” is selected. Times use {{ cfg.business_timezone }}. A To time of midnight means the end of that day. For overnight availability, enter each day's portion separately. “No hours” means you cannot work that day.</p>
+<p class="muted">From/To apply when “Enter hours” is selected. Times use {{ cfg.business_timezone }}. Choose times from 5:00 AM to 11:00 PM in 15-minute steps, with To later than From. “No hours” means you cannot work that day.</p>
 <div class="form-step"><span>3</span><h2>Send for approval</h2></div><label>Anything your manager should know? (optional)<textarea name="employee_note" maxlength="2000" rows="3"></textarea></label>
 <div class="form-actions"><button {% if usage.blocked %}disabled{% endif %}>{{ "Request limit reached" if usage.blocked else "Send to my manager" }}</button><a href="/availability">Cancel</a></div><p class="muted">Your hours change only after your manager approves.</p>
 </form>{% endif %}{% endblock %}
