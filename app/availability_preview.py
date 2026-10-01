@@ -27,10 +27,14 @@ def preview(events, today):
         day=first+timedelta(days=i)
         begin,end=day.replace(hour=5),day.replace(hour=23)
         spans=sorted((max(a,begin),min(b,end)) for a,b in blocked if b>begin and a<end)
-        cursor=begin; available=[]
+        cursor=begin; available=[]; windows=[]
+        def add_window(a,b):
+            available.append(f'{label(a)}–{label(b)}')
+            windows.append({'label':available[-1], 'top':(a-begin).total_seconds()/648,
+                'height':(b-a).total_seconds()/648})
         for a,b in spans:
-            if a>cursor: available.append(f'{label(cursor)}–{label(a)}')
+            if a>cursor: add_window(cursor,a)
             cursor=max(cursor,b)
-        if cursor<end: available.append(f'{label(cursor)}–{label(end)}')
-        rows.append({'date':day.date(),'hours':', '.join(available) or 'No available hours'})
+        if cursor<end: add_window(cursor,end)
+        rows.append({'date':day.date(),'hours':', '.join(available) or 'No available hours','windows':windows})
     return rows

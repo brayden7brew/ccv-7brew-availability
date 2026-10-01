@@ -202,11 +202,26 @@ def availability(request: Request, db=Depends(get_db)):
     today = local_today()
     current = next((r for r in reversed(rows) if r.effective_date <= today), None)
     upcoming = [r for r in rows if r.effective_date > today]
-    first, last = date_range()
-    state = WIW().read(user.wiw_user_id, first, last)
+    from .availability_preview import preview
+    try:
+        selected = datetime.strptime(request.query_params.get('week', today.isoformat()), '%Y-%m-%d').date()
+        if abs((selected-today).days) > 366: raise ValueError()
+    except ValueError:
+        raise HTTPException(422, 'Choose a week within one year of today.') from None
+    week = selected - timedelta(days=(selected.weekday()+1)%7)
+    first, last = date_range(week.isoformat(), (week+timedelta(days=7)).isoformat())
+    calendar = None
+    try:
+        state = WIW().read(user.wiw_user_id, first, last)
+        calendar = preview(state['availabilityevents'], week)
+    except (WIWError, ValueError, KeyError, TypeError, OverflowError):
+        logger.warning('Availability calendar could not be loaded')
     return page(request, 'availability.html', user=user, days=DAYS,
         current=display_schedule(current), upcoming=[display_schedule(r) for r in upcoming],
-        events=state['availabilityevents'])
+        calendar=calendar, today=today, week=week, week_end=week+timedelta(days=6),
+        previous_week=week-timedelta(days=7), next_week=week+timedelta(days=7),
+        can_previous=(today-(week-timedelta(days=7))).days<=366,
+        can_next=((week+timedelta(days=7))-today).days<=366)
 
 @app.get('/requests/new')
 def new(request: Request, db=Depends(get_db)):
