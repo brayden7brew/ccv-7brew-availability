@@ -1,4 +1,5 @@
 import secrets
+import re
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -50,7 +51,8 @@ app.include_router(webhook_router)
 @app.middleware('http')
 async def headers(request, call_next):
     response = await call_next(request)
-    script_source = "'self'" if request.url.path in ('/requests/new', '/requests') else "'none'"
+    script_source = "'self'" if (request.url.path in ('/requests/new', '/requests')
+        or re.fullmatch(r'/requests/[0-9]+', request.url.path)) else "'none'"
     response.headers.update({'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY',
         'Referrer-Policy': 'same-origin', 'Cache-Control': 'no-store',
         'Content-Security-Policy': f"default-src 'self'; style-src 'self'; script-src {script_source}; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})

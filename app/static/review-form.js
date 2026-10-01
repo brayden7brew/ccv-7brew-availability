@@ -1,0 +1,25 @@
+(() => {
+  const form = document.getElementById('review-form');
+  if (!form) return;
+  const note = document.getElementById('review-note');
+  const reject = document.getElementById('reject-button');
+  const help = document.getElementById('reject-help');
+  function update() {
+    const hasReason = note.value.trim().length > 0;
+    reject.disabled = !hasReason;
+    help.textContent = hasReason
+      ? 'Your reason will be shared with the employee if you reject this request.'
+      : 'Enter a reason to enable Reject.';
+  }
+  note.addEventListener('input', update);
+  note.addEventListener('change', update);
+  window.addEventListener('pageshow', update);
+  form.addEventListener('submit', (event) => {
+    update();
+    if (event.submitter === reject && reject.disabled) {
+      event.preventDefault();
+      note.focus();
+    }
+  });
+  update();
+})();
