@@ -16,6 +16,8 @@ def test_official_read_and_write_contract(monkeypatch):
         calls.append(request)
         assert request.headers['W-UserID']=='90'
         assert request.headers['Authorization']=='Bearer server-only-secret'
+        if request.method=='GET' and request.url.path.endswith('/1'):
+            return httpx.Response(200,json={'availabilityevent':{'id':1,'account_id':10,'user_id':20}})
         if request.method=='GET':
             assert request.url.params['user_id']=='20'
             return httpx.Response(200,json={'availabilityevents':[{'id':1,'account_id':10,'user_id':20}]})
@@ -27,8 +29,8 @@ def test_official_read_and_write_contract(monkeypatch):
     change=SimpleNamespace(status='applying', manager_id=2,dry_run=False,action='create',wiw_user_id=20,
         proposed={'type':1,'start_time':'2030-01-01T10:00:00-05:00','end_time':'2030-01-01T11:00:00-05:00'})
     provider.apply(change)
-    assert [r.method for r in calls]==['GET','POST']
-    assert all(r.url.path=='/2/availabilityevents' for r in calls)
+    assert [r.method for r in calls]==['GET','GET','POST']
+    assert [r.url.path for r in calls]==['/2/availabilityevents','/2/availabilityevents/1','/2/availabilityevents']
 
 @pytest.mark.parametrize('status,dry', [('pending',False),('rejected',False),('applying',True),('approved_dry_run',True)])
 def test_write_gate(monkeypatch,status,dry):
@@ -84,6 +86,9 @@ def test_long_reads_use_90_day_windows_and_deduplicate(monkeypatch):
     calls=[]
     repeated={'id':1,'user_id':20,'account_id':10,'recurrence':'FREQ=WEEKLY'}
     def handle(request):
+        if request.url.path != '/2/availabilityevents':
+            event_id=int(request.url.path.rsplit('/',1)[1])
+            return httpx.Response(200,json={'availabilityevent':{'id':event_id,'user_id':20,'account_id':10}})
         start=datetime.fromisoformat(request.url.params['start'])
         end=datetime.fromisoformat(request.url.params['end'])
         assert timedelta(0)<end-start<=timedelta(days=90)
@@ -97,7 +102,7 @@ def test_long_reads_use_90_day_windows_and_deduplicate(monkeypatch):
     assert all(calls[i][1]==calls[i+1][0] for i in range(len(calls)-1))
     assert [e['id'] for e in result['availabilityevents']]==[1,2,3,4,5,6]
 
-@pytest.mark.parametrize('failure',['http','wrong_user','changed_duplicate'])
+@pytest.mark.parametrize('failure',['http','wrong_user'])
 def test_later_window_failure_never_returns_partial_state(monkeypatch,failure):
     live(monkeypatch)
     calls=[]
@@ -107,7 +112,6 @@ def test_later_window_failure_never_returns_partial_state(monkeypatch,failure):
         if len(calls)>1:
             if failure=='http': return httpx.Response(403,json={'error':'Denied'})
             if failure=='wrong_user': event['user_id']=99
-            if failure=='changed_duplicate': event['notes']='edited during read'
         return httpx.Response(200,json={'availabilityevents':[event]})
     with pytest.raises(WIWError):
         WIW(httpx.MockTransport(handle)).read(20,'2030-01-01','2031-01-01')
@@ -158,3 +162,51 @@ def test_error_metadata_distinguishes_auth_timeout_and_invalid_response(monkeypa
     with pytest.raises(WIWError) as caught:
         WIW(httpx.MockTransport(timeout)).read(20,'2030-01-01','2030-01-15')
     assert caught.value.reason=='timeout'
+
+
+def test_recurring_occurrences_use_saved_event_and_detect_later_edits(monkeypatch):
+    from app.workflow import canonical
+    live(monkeypatch)
+    saved={'id':1,'user_id':20,'account_id':10,'recurrence':'FREQ=WEEKLY;BYDAY=SU',
+           'start_time':'2030-01-06T05:00:00-05:00','end_time':'2030-01-06T10:00:00-05:00'}
+    detail_calls=[]
+    def handle(request):
+        if request.url.path=='/2/availabilityevents/1':
+            detail_calls.append(request)
+            return httpx.Response(200,json={'availabilityevent':saved})
+        # Occurrences differ both within one window and across windows.
+        occurrence={**saved,'start_time':request.url.params['start'],
+                    'end_time':request.url.params['end']}
+        return httpx.Response(200,json={'availabilityevents':[saved,occurrence]})
+    provider=WIW(httpx.MockTransport(handle))
+    before=provider.read(20,'2030-01-01','2031-01-01')
+    assert before=={'availabilityevents':[saved]}
+    assert len(detail_calls)==1
+    assert canonical(provider.read(20,'2030-01-01','2031-01-01'))==canonical(before)
+    saved['notes']='Real edit after submission'
+    assert canonical(provider.read(20,'2030-01-01','2031-01-01'))!=canonical(before)
+
+
+@pytest.mark.parametrize('detail', [None, [], {},
+    {'id':2,'user_id':20,'account_id':10},
+    {'id':1,'user_id':99,'account_id':10},
+    {'id':1,'user_id':20,'account_id':99}])
+def test_saved_event_identity_is_verified(monkeypatch, detail):
+    live(monkeypatch)
+    def handle(request):
+        if request.url.path=='/2/availabilityevents':
+            return httpx.Response(200,json={'availabilityevents':[{'id':1,'user_id':20,'account_id':10}]})
+        return httpx.Response(200,json={'availabilityevent':detail})
+    with pytest.raises(WIWError) as caught:
+        WIW(httpx.MockTransport(handle)).read(20,'2030-01-01','2030-02-01')
+    assert caught.value.reason=='event_identity_mismatch'
+
+
+def test_deleted_saved_event_never_returns_partial_state(monkeypatch):
+    live(monkeypatch)
+    def handle(request):
+        if request.url.path=='/2/availabilityevents':
+            return httpx.Response(200,json={'availabilityevents':[{'id':1,'user_id':20,'account_id':10}]})
+        return httpx.Response(404,json={'error':'Not found'})
+    with pytest.raises(WIWError):
+        WIW(httpx.MockTransport(handle)).read(20,'2030-01-01','2030-02-01')

@@ -75,8 +75,9 @@ class WIW:
             raise WIWError('Invalid availability date range.', reason='invalid_date_range') from exc
         # WIW error 2002 confirms a maximum of 95 days per request. Use 90
         # elapsed days, sharing boundaries, so there are no gaps or DST overruns.
-        # Recurring events may appear in several windows; retain each ID once.
-        by_id = {}
+        # Range results can describe occurrences of the same recurring series.
+        # Discover IDs here, then fetch saved events for stable approval snapshots.
+        event_ids = set()
         cursor = first
         while cursor < last:
             boundary = min(cursor + timedelta(days=90), last)
@@ -90,18 +91,21 @@ class WIW:
                         or event.get('user_id') != user_id
                         or event.get('account_id') != self.cfg.wiw_account_id):
                     raise WIWError('WIW returned an unexpected account/user or event list.', reason='event_identity_mismatch')
-                event_id = event['id']
-                if event_id in by_id and by_id[event_id] != event:
-                    raise WIWError('WIW availability changed while loading. Reload and try again.', reason='availability_changed')
-                by_id[event_id] = event
+                event_ids.add(event['id'])
             cursor = boundary
-        return {'availabilityevents': [by_id[key] for key in sorted(by_id)]}
+        # Fail the whole read if any saved event is missing or cannot be verified.
+        # Approval repeats this read and compares all fields with the submitted
+        # snapshot, so real edits still block a write.
+        return {'availabilityevents': [self.get(key, user_id) for key in sorted(event_ids)]}
 
     def get(self, event_id, user_id):
         result = self.call('GET', f'/2/availabilityevents/{event_id}')
         event = result.get('availabilityevent', {})
-        if event.get('user_id') != user_id or event.get('account_id') != self.cfg.wiw_account_id:
-            raise WIWError('Availability event does not match the configured employee/account.')
+        if (not isinstance(event, dict) or type(event.get('id')) is not int
+                or event['id'] != event_id or event.get('user_id') != user_id
+                or event.get('account_id') != self.cfg.wiw_account_id):
+            raise WIWError('Availability event does not match the configured employee/account.',
+                           reason='event_identity_mismatch')
         return event
 
     def apply(self, change):
