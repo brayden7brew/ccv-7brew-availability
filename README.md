@@ -158,6 +158,8 @@ Security includes Argon2 password hashes, server-side revocable sessions (only o
 
 ```bash
 python -m pytest -q
+# Browser-form logic checks (Node.js 22+):
+node --test tests/weekly-form.test.cjs
 ```
 
 Default tests use an isolated in-memory SQLite database and HTTP mocks; they never contact WIW. To test PostgreSQL, create a **dedicated disposable test database**, then:
@@ -268,3 +270,6 @@ dry-run. All subsequent submissions use their configured notice. Minimum hours
 still apply to the first request. Rules are validated under the employee lock
 before reading WIW, are snapshotted in the submission audit, and never alter
 already-submitted requests. Webhook updates preserve these individual settings.
+
+### Live form validation
+The weekly form requires JavaScript and validates dates, daily time windows, counted minimum hours, and request limits before enabling Send. It shows a live counted-hours total and errors beside daily time fields. Only a local script is allowed on the two weekly-form routes; inline and third-party scripts remain blocked. Server validation remains authoritative, including updated employee rules, and returns invalid submissions on the same form with entered values preserved. A WIW read failure also preserves the form without creating a request.

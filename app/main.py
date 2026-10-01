@@ -47,16 +47,17 @@ app.include_router(webhook_router)
 @app.middleware('http')
 async def headers(request, call_next):
     response = await call_next(request)
+    script_source = "'self'" if request.url.path in ('/requests/new', '/requests') else "'none'"
     response.headers.update({'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY',
         'Referrer-Policy': 'same-origin', 'Cache-Control': 'no-store',
-        'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
+        'Content-Security-Policy': f"default-src 'self'; style-src 'self'; script-src {script_source}; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
     if cfg.secure_cookies:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000'
     return response
 
-def page(request, name, **context):
+def page(request, name, status_code=200, **context):
     request.session.setdefault('csrf', secrets.token_urlsafe(32))
-    return templates.TemplateResponse(request=request, name=name, context={
+    return templates.TemplateResponse(request=request, name=name, status_code=status_code, context={
         'csrf': request.session['csrf'], 'cfg': cfg, **context})
 
 @app.exception_handler(HTTPException)
@@ -205,8 +206,15 @@ def new(request: Request, db=Depends(get_db)):
     user = current_user(request, db)
     rows = timeline(db, user.id, cfg.dry_run)
     defaults = rows[-1].days if rows else [{'mode':'none','start':'','end':''} for _ in DAYS]
-    return page(request, 'new.html', user=user, days=DAYS, defaults=defaults,
-        usage=request_usage(db, user.id), rules=employee_rules(db,user), earliest=employee_rules(db,user)['earliest'].isoformat())
+    return weekly_form(request, db, user, defaults)
+
+
+def weekly_form(request, db, user, defaults, *, effective_date='', employee_note='', error='', status_code=200):
+    rules = employee_rules(db, user)
+    return page(request, 'new.html', status_code=status_code, user=user, days=DAYS, defaults=defaults,
+        usage=request_usage(db, user.id), rules=rules, earliest=rules['earliest'].isoformat(),
+        latest=(local_today()+timedelta(days=366)).isoformat(), effective_date=effective_date,
+        employee_note=employee_note, form_error=error)
 
 @app.post('/requests')
 async def submit(request: Request, db=Depends(get_db)):
@@ -216,25 +224,43 @@ async def submit(request: Request, db=Depends(get_db)):
     if form.get('action') != 'weekly':
         raise HTTPException(422, 'Use the new weekly availability form.')
     note = str(form.get('employee_note', '')).strip()
-    if len(note) > 2000: raise HTTPException(422, 'Reason is limited to 2000 characters.')
+    days = [{'mode':str(form.get(f'day_{i}_mode','none')), 'start':str(form.get(f'day_{i}_start','')),
+             'end':str(form.get(f'day_{i}_end',''))} for i in range(7)]
+    effective_date = str(form.get('effective_date', ''))
+
+    def invalid(message, status_code=422):
+        db.rollback()  # Release any employee lock and reload current requirements.
+        return weekly_form(request, db, user, days, effective_date=effective_date,
+            employee_note=note, error=message, status_code=status_code)
+
+    if len(note) > 2000:
+        return invalid('Keep your note to 2,000 characters or fewer.')
     try:
-        data = WeeklyInput(effective_date=form.get('effective_date'), days=[{
-            'mode':form.get(f'day_{i}_mode','none'), 'start':form.get(f'day_{i}_start',''),
-            'end':form.get(f'day_{i}_end','')} for i in range(7)])
+        data = WeeklyInput(effective_date=effective_date, days=days)
     except ValidationError as exc:
-        raise HTTPException(422, '; '.join(e['msg'] for e in exc.errors()))
+        return invalid('; '.join(e['msg'].removeprefix('Value error, ') for e in exc.errors()))
+    allowed_times = {f'{m//60:02d}:{m%60:02d}' for m in range(300,1381,15)}
+    for i, day in enumerate(data.days):
+        if day.mode == 'hours' and any(value not in allowed_times for value in (day.start,day.end)):
+            return invalid(f'{DAYS[i]}: choose times between 5:00 AM and 11:00 PM in 15-minute steps.')
     # Serialize capture against approval of another schedule for this employee.
     db.scalar(select(User).where(User.id == user.id).with_for_update().execution_options(populate_existing=True))
-    applied_rules=validate_employee_rules(db,user,data)
+    try:
+        applied_rules=validate_employee_rules(db,user,data)
+    except HTTPException as exc:
+        return invalid(exc.detail, exc.status_code)
     usage = request_usage(db, user.id)
     if usage['blocked']:
-        raise HTTPException(429, f"You have reached the limit of {usage['limit']} requests in 30 days. You can submit again at {usage['reset'].isoformat()}.")
+        return invalid(f"You have reached the limit of {usage['limit']} requests in 30 days. You can submit again at {local_datetime(usage['reset'])}.", 429)
     rows = timeline(db, user.id, cfg.dry_run)
     zone = ZoneInfo(cfg.business_timezone)
     begin = datetime.combine(local_today(), datetime.min.time(), tzinfo=zone)
     end = datetime.combine(data.effective_date+timedelta(days=366), datetime.min.time(), tzinfo=zone)
     first, last = begin.isoformat(), end.isoformat()
-    before = WIW().read(user.wiw_user_id, first, last)
+    try:
+        before = WIW().read(user.wiw_user_id, first, last)
+    except WIWError:
+        return invalid('When I Work is temporarily unavailable. Your request has not been submitted. Please try again later.', 503)
     prior = next((r for r in reversed(rows) if r.effective_date <= data.effective_date), None)
     before.update(timeline_ids=timeline_ids(rows), schedule=display_schedule(prior), dry_run=cfg.dry_run)
     change = Change(employee_id=user.id, location=user.location, secondary_location=user.secondary_location, wiw_user_id=user.wiw_user_id,
