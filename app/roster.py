@@ -43,3 +43,32 @@ def import_roster(db, actor, wiw):
             details={'event': 'wiw_employee_imported', 'account_id': cfg.wiw_account_id}))
         added += 1
     return added
+
+
+def import_schedules(db, actor, wiw):
+    """Add active WIW schedule names as approval choices without changing scopes."""
+    from .models import Location
+    cfg=settings()
+    if cfg.wiw_mode!='live': raise WIWError('Schedule import requires a live WIW connection.')
+    records=wiw.call('GET','/2/locations').get('locations')
+    if not isinstance(records,list): raise WIWError('WIW returned an unexpected schedule list.')
+    seen=set()
+    names=[]
+    for row in records:
+        if (not isinstance(row,dict) or type(row.get('id')) is not int or row['id']<=0
+                or row['id'] in seen or type(row.get('account_id')) is not int
+                or row['account_id']!=cfg.wiw_account_id):
+            raise WIWError('WIW returned an unexpected workplace or schedule. No schedules imported.')
+        seen.add(row['id'])
+        if row.get('is_deleted') is not False or row.get('deleted_at'): continue
+        name=row.get('name')
+        if not isinstance(name,str) or not name.strip() or len(name.strip())>120:
+            raise WIWError('A WIW schedule has an invalid name. No schedules imported.')
+        names.append(name.strip())
+    added=0
+    for name in sorted(set(names)):
+        if not db.get(Location,name):
+            db.add(Location(name=name));added+=1
+    db.add(AdminAudit(actor_id=actor.id,target_id=actor.id,
+        details={'event':'wiw_schedules_imported','account_id':cfg.wiw_account_id,'added':added}))
+    return added

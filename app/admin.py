@@ -97,7 +97,7 @@ async def add_location(request: Request, db=Depends(get_db)):
 @router.post('/admin/import-wiw')
 async def import_wiw(request: Request, db=Depends(get_db)):
     from .wiw import WIW, WIWError
-    from .roster import import_roster
+    from .roster import import_roster, import_schedules
     from sqlalchemy.exc import IntegrityError
     actor = require_admin(request, db)
     form = await request.form(max_fields=5)
@@ -107,7 +107,9 @@ async def import_wiw(request: Request, db=Depends(get_db)):
     if actor.role != 'admin':
         raise HTTPException(403, 'Administrator access is required.')
     try:
-        count = import_roster(db, actor, WIW())
+        wiw=WIW()
+        schedule_count=import_schedules(db, actor, wiw)
+        count = 0 if form.get("schedules_only")=="on" else import_roster(db, actor, wiw)
         db.commit()
     except WIWError as exc:
         db.rollback()
@@ -115,7 +117,7 @@ async def import_wiw(request: Request, db=Depends(get_db)):
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(409, 'An employee signed in while importing. Run the import again.') from exc
-    return RedirectResponse(f'/admin?imported={count}', 303)
+    return RedirectResponse(f'/admin?imported={count}&schedules_imported={schedule_count}', 303)
 
 
 @router.post('/admin/email-test')

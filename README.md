@@ -232,3 +232,13 @@ are revoked on completion. Disabled accounts cannot redeem codes, and a credenti
 change invalidates outstanding codes. This fallback does not inherit WIW MFA.
 Run the latest Alembic migration before using this feature; Render's predeploy
 command runs it automatically.
+
+### WIW schedules populate location choices
+Admin → **Import schedules from WIW** reads the documented `GET /2/locations`
+endpoint. **Import employees & schedules from WIW** imports both in one database
+transaction. Active schedule names from the configured workplace become choices
+in both employee location dropdowns and manager approval checkboxes. Wrong-account
+responses abort the import. Imports do not change employee assignments or grant
+manager permissions. Existing names are retained for historical requests and
+current permissions; schedule renames add a new choice and need administrator
+review of affected assignments. Availability remains workplace-wide in WIW.

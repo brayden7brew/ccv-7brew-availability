@@ -49,7 +49,7 @@ def test_import_route_admin_csrf_and_success(client,db,monkeypatch):
     token=sign_in(client,'manager@test.local')
     assert client.post('/admin/import-wiw',data={}).status_code==403
     monkeypatch.setattr(settings(),'wiw_mode','live')
-    monkeypatch.setattr(WIW,'call',lambda *a,**kw:{'users':[record()]})
+    monkeypatch.setattr(WIW,'call',lambda *a,**kw:{'users':[record()], 'locations':[]})
     response=client.post('/admin/import-wiw',data={'csrf':token})
     assert response.status_code==200
     assert '1 new employees added' in response.text
