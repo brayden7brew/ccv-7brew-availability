@@ -154,26 +154,27 @@ class WIW:
                 raise WIWError('WIW did not confirm the expected availability update.')
             # A successful HTTP status alone does not prove that WIW capped the rule.
             observed = self.get(operation['event_id'], change.wiw_user_id)
-            for key, value in operation['payload'].items():
-                actual = observed.get(key)
-                if key in ('start_time', 'end_time'):
-                    try:
-                        matches = parse(actual) == parse(value)
-                    except (ValueError, TypeError):
-                        matches = False
-                elif key == 'recurrence':
-                    matches = sorted((actual or '').removeprefix('RRULE:').upper().split(';')) == sorted(value.upper().split(';'))
-                else:
-                    matches = actual == value
-                if not matches:
-                    raise WIWError('WIW availability update could not be verified.')
+            self.verify_payload(observed, operation['payload'])
         elif operation['action'] == 'create':
             result = self.call('POST', '/2/availabilityevents', payload={
                 **operation['payload'], 'user_id':change.wiw_user_id, 'account_id':self.cfg.wiw_account_id})
             event = result.get('availabilityevent', {})
-            if (not isinstance(event.get('id'), int) or event.get('user_id') != change.wiw_user_id
+            if (not isinstance(event, dict) or type(event.get('id')) is not int or event.get('user_id') != change.wiw_user_id
                     or event.get('account_id') != self.cfg.wiw_account_id):
                 raise WIWError('WIW created-event response could not be verified.')
+            self.verify_payload(event, operation['payload'])
         else:
             raise WIWError('Unsupported weekly operation.')
         return result
+
+    @staticmethod
+    def verify_payload(event, payload):
+        from .event_identity import event_signature
+        try:
+            matches = (event_signature(event) == event_signature(payload)
+                       and ('notes' not in payload or event.get('notes', '') == payload['notes']))
+        except (ValueError, TypeError, KeyError, OverflowError):
+            matches = False
+        if not matches:
+            raise WIWError('WIW returned different dates, hours, or recurrence than approved. Stop and reconcile this request.',
+                           reason='write_payload_mismatch')

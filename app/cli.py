@@ -9,6 +9,18 @@ from .security import hasher
 from .workflow import audit
 from .wiw import WIW
 
+def event_summary(event):
+    """Whitelist availability fields; never print notes or authentication data."""
+    import json
+    result = {key:event.get(key) for key in ('id','type','start_time','end_time','all_day','recurrence','created_at','updated_at')}
+    children = event.get('events')
+    result['events_shape'] = type(children).__name__
+    if isinstance(children, list):
+        result['events_count'] = len(children)
+        result['child_ids'] = [item.get('id') for item in children[:20] if isinstance(item, dict)]
+    return json.dumps(result, sort_keys=True)
+
+
 def password():
     value = getpass.getpass('New portal password (at least 8 characters): ')
     if len(value) < 8 or value != getpass.getpass('Confirm password: '):
@@ -92,6 +104,15 @@ def main():
             for entry in entries:
                 index = entry.details.get('index')
                 print(f'Operation {index}: {entry.event}')
+                if entry.event == 'operation_succeeded':
+                    saved = entry.details.get('response', {}).get('availabilityevent')
+                    if isinstance(saved, dict) and type(saved.get('id')) is int:
+                        print('  Saved creation: ' + event_summary(saved))
+                        try:
+                            observed = provider.get(saved['id'], change.wiw_user_id)
+                            print('  Current original record: ' + event_summary(observed))
+                        except WIWError as exc:
+                            print(f"  Original record {saved['id']}: reason={exc.reason} http_status={exc.http_status} wiw_code={exc.wiw_code}")
                 if entry.event != 'operation_started': continue
                 operation = entry.details['operation']
                 event_id = operation.get('event_id')

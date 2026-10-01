@@ -110,10 +110,7 @@ def reconcile_weekly(db, actor, change, outcome, note, provider):
     else:
         retained = approval.details.get('retained_external_events', [])
         expected = retained + [op['payload'] for op in approval.details['operations'] if op['action']=='create']
-        def fingerprint(event):
-            rule = event.get('recurrence','') or ''
-            return (event['type'], parse(event['start_time']).isoformat(), parse(event['end_time']).isoformat(),
-                bool(event.get('all_day',False)), tuple(sorted(rule.removeprefix('RRULE:').upper().split(';'))))
+        from .event_identity import event_signature as fingerprint
         from collections import Counter
         if Counter(map(fingerprint,current['availabilityevents'])) != Counter(map(fingerprint,expected)):
             raise ValueError('WIW does not match the complete approved weekly plan. Leave this request unresolved until every planned event is verified.')

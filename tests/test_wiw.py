@@ -247,3 +247,40 @@ def test_unusual_delete_response_requires_verified_absence(monkeypatch,read_stat
     else:
         with pytest.raises(WIWError): provider.weekly_operation(change,{'action':'delete','event_id':77})
     assert calls==['DELETE','GET']
+
+
+@pytest.mark.parametrize('returned_start,returned_end,all_day,recurrence,accepted',[
+    ('Mon, 19 Oct 2026 00:00:00 +0000','Mon, 19 Oct 2026 05:15:00 +0000',False,'FREQ=WEEKLY;BYDAY=SU',False),
+    ('Sun, 18 Oct 2026 00:00:00 +0000','Sun, 18 Oct 2026 05:15:00 +0000',False,'FREQ=WEEKLY;BYDAY=SU',False),
+    ('Sun, 18 Oct 2026 04:00:00 +0000','Sun, 18 Oct 2026 09:15:00 +0000',False,'FREQ=WEEKLY;BYDAY=SU',True),
+    ('Sun, 18 Oct 2026 04:00:00 +0000','Sun, 18 Oct 2026 09:15:00 +0000',False,'',False),
+    ('Sun, 18 Oct 2026 04:00:00 +0000','Mon, 19 Oct 2026 03:59:59 +0000',True,'FREQ=WEEKLY;BYDAY=SU',True),
+    ('Sun, 18 Oct 2026 04:00:00 +0000','Mon, 19 Oct 2026 02:59:59 +0000',True,'FREQ=WEEKLY;BYDAY=SU',False),
+])
+def test_create_rejects_shifted_dates_times_or_lost_recurrence(monkeypatch,returned_start,returned_end,all_day,recurrence,accepted):
+    live(monkeypatch)
+    payload={'type':1,'start_time':'2026-10-18T00:00:00-04:00',
+        'end_time':'2026-10-19T00:00:00-04:00' if all_day else '2026-10-18T05:15:00-04:00',
+        'all_day':all_day,'recurrence':'FREQ=WEEKLY;BYDAY=SU'}
+    event={'id':77,'account_id':10,'user_id':20,**payload,'start_time':returned_start,'end_time':returned_end,'recurrence':recurrence}
+    provider=WIW(httpx.MockTransport(lambda request:httpx.Response(200,json={'availabilityevent':event})))
+    change=SimpleNamespace(action='weekly',status='applying',manager_id=2,dry_run=False,wiw_user_id=20)
+    if accepted: provider.weekly_operation(change,{'action':'create','payload':payload})
+    else:
+        with pytest.raises(WIWError) as caught: provider.weekly_operation(change,{'action':'create','payload':payload})
+        assert caught.value.reason=='write_payload_mismatch'
+
+
+@pytest.mark.parametrize('event',[None,[],{}])
+def test_malformed_create_response_is_reconcilable_error(monkeypatch,event):
+    live(monkeypatch)
+    provider=WIW(httpx.MockTransport(lambda request:httpx.Response(200,json={'availabilityevent':event})))
+    change=SimpleNamespace(action='weekly',status='applying',manager_id=2,dry_run=False,wiw_user_id=20)
+    with pytest.raises(WIWError): provider.weekly_operation(change,{'action':'create','payload':{'type':1}})
+
+
+def test_all_day_end_normalization_preserves_fall_dst_day():
+    from app.event_identity import event_signature
+    expected={'type':1,'all_day':True,'start_time':'2026-11-01T00:00:00-04:00','end_time':'2026-11-02T00:00:00-05:00'}
+    actual={**expected,'end_time':'Mon, 02 Nov 2026 04:59:59 +0000'}
+    assert event_signature(actual)==event_signature(expected)

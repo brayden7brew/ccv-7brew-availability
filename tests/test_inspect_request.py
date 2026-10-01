@@ -21,3 +21,10 @@ def test_inspection_only_reads_and_keeps_request_status(client,db,monkeypatch,ca
     assert db.get(Change,1).status=='pending'
     assert db.scalar(select(func.count(Audit.id)))==count
     assert provider.writes==0
+
+
+def test_event_summary_omits_notes_and_nested_private_fields():
+    output=cli.event_summary({'id':77,'notes':'private employee message','token':'secret',
+        'events':[{'id':88,'notes':'private child message','token':'secret'}]})
+    assert '77' in output and '88' in output
+    assert 'private' not in output and 'secret' not in output and 'token' not in output
