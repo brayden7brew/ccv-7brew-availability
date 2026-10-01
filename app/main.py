@@ -14,6 +14,7 @@ from .sessions import DeviceSessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .config import settings
 from .request_limits import request_usage
+from .availability_rules import employee_rules, validate_employee_rules
 from .db import get_db
 from .models import User, Scope, Change, Audit, LoginSession, LoginAttempt, now
 from .security import current_user, csrf, digest, login, verify, DUMMY
@@ -201,7 +202,7 @@ def new(request: Request, db=Depends(get_db)):
     rows = timeline(db, user.id, cfg.dry_run)
     defaults = rows[-1].days if rows else [{'mode':'hours','start':'','end':''} for _ in DAYS]
     return page(request, 'new.html', user=user, days=DAYS, defaults=defaults,
-        usage=request_usage(db, user.id), earliest=(local_today()+timedelta(days=max(1,cfg.minimum_notice_days))).isoformat())
+        usage=request_usage(db, user.id), rules=employee_rules(db,user), earliest=employee_rules(db,user)['earliest'].isoformat())
 
 @app.post('/requests')
 async def submit(request: Request, db=Depends(get_db)):
@@ -219,7 +220,8 @@ async def submit(request: Request, db=Depends(get_db)):
     except ValidationError as exc:
         raise HTTPException(422, '; '.join(e['msg'] for e in exc.errors()))
     # Serialize capture against approval of another schedule for this employee.
-    db.scalar(select(User).where(User.id == user.id).with_for_update())
+    db.scalar(select(User).where(User.id == user.id).with_for_update().execution_options(populate_existing=True))
+    applied_rules=validate_employee_rules(db,user,data)
     usage = request_usage(db, user.id)
     if usage['blocked']:
         raise HTTPException(429, f"You have reached the limit of {usage['limit']} requests in 30 days. You can submit again at {usage['reset'].isoformat()}.")
@@ -236,7 +238,8 @@ async def submit(request: Request, db=Depends(get_db)):
         read_start=first, read_end=last, employee_note=note)
     db.add(change)
     db.flush()
-    audit(db, change, user, 'submitted', {'before':before, 'proposed':change.proposed, 'action':'weekly'})
+    user.first_request_notice_exception=False
+    audit(db, change, user, 'submitted', {'before':before, 'proposed':change.proposed, 'action':'weekly','rules':applied_rules})
     db.commit()
     return RedirectResponse(f'/requests/{change.id}', 303)
 

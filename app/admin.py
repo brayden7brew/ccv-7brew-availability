@@ -186,3 +186,30 @@ async def email_test(request: Request, db=Depends(get_db)):
     db.add(AdminAudit(actor_id=actor.id,target_id=actor.id,details={'event':'test_email_accepted'}))
     db.commit()
     return RedirectResponse('/admin?email_test=accepted',303)
+
+
+@router.post('/admin/users/{user_id}/rules')
+async def update_rules(request:Request,user_id:int,db=Depends(get_db)):
+    from decimal import Decimal, InvalidOperation
+    actor=require_admin(request,db)
+    form=await request.form(max_fields=10)
+    csrf(request,form.get('csrf'))
+    try:
+        minutes=Decimal(str(form.get('minimum_hours','15')))*60
+        notice=int(str(form.get('notice_days','14')))
+        if not minutes.is_finite() or minutes!=minutes.to_integral_value() or not 0<=minutes<=7560 or not 1<=notice<=366: raise ValueError()
+    except (ValueError,InvalidOperation):
+        raise HTTPException(422,'Choose 0–126 minimum hours (whole minutes) and 1–366 notice days.')
+    lock_admin_changes(db);db.refresh(actor)
+    if actor.role!='admin' or not actor.active: raise HTTPException(403,'Administrator access is required.')
+    person=db.scalar(select(User).where(User.id==user_id).with_for_update())
+    if not person: raise HTTPException(404,'Employee not found.')
+    keys=('minimum_hours_enabled','minimum_available_minutes','notice_enabled','notice_days')
+    before={k:getattr(person,k) for k in keys}
+    person.minimum_hours_enabled=form.get('minimum_hours_enabled')=='on'
+    person.minimum_available_minutes=int(minutes)
+    person.notice_enabled=form.get('notice_enabled')=='on'
+    person.notice_days=notice
+    db.add(AdminAudit(actor_id=actor.id,target_id=person.id,details={'event':'availability_rules_updated','before':before,'after':{k:getattr(person,k) for k in keys}}))
+    db.commit()
+    return RedirectResponse(f'/admin/users/{user_id}?'+directory_filters(request)[1]+'&saved=1',303)

@@ -249,3 +249,22 @@ for primary or secondary location, portal role, and active/disabled status.
 Select a name to open that employee's access and password-setup card. Back links
 and saving access preserve directory filters. Import/email controls and the
 recent access log are grouped into collapsible sections beneath the directory.
+
+### Per-employee availability rules
+Each employee card has **Availability requirements**. Defaults are a 15-hour
+weekly minimum, counting only the overlap with 05:00–23:00 each day in the
+business timezone, and 14 calendar days of advance notice. Each rule has its own
+on/off control. Minimum hours can be edited in quarter-hour increments (up to
+126 hours), and notice can be 1–366 days. Turning notice off allows tomorrow,
+not past/today start dates. The older MINIMUM_NOTICE_DAYS environment variable
+no longer controls weekly submissions.
+
+Existing users receive these defaults through migration, without a new-hire
+exception. Newly created portal records (WIW auto-enrollment, roster import,
+webhook new hire, or operator creation) can make their first successful weekly
+submission for tomorrow. Invalid/failed submissions do not consume this exception;
+a successfully submitted request does, including one later rejected or tested in
+dry-run. All subsequent submissions use their configured notice. Minimum hours
+still apply to the first request. Rules are validated under the employee lock
+before reading WIW, are snapshotted in the submission audit, and never alter
+already-submitted requests. Webhook updates preserve these individual settings.

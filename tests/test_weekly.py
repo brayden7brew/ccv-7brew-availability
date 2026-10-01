@@ -128,6 +128,8 @@ def test_full_live_replacement_preserves_approved_timeline(client,db,monkeypatch
     csrf=sign_in(client)
     effective=(local_today()+timedelta(days=45)).isoformat()
     data={'csrf':csrf,'action':'weekly','effective_date':effective}
+    db.get(User,1).minimum_hours_enabled=False
+    db.commit()
     for i in range(7): data[f'day_{i}_mode']='none'
     assert client.post('/requests',data=data).status_code==200
     decide(db,db.get(User,2),2,'approve','',provider)

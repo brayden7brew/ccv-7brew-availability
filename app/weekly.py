@@ -37,7 +37,7 @@ class WeeklyInput(BaseModel):
     @model_validator(mode='after')
     def valid(self):
         today = local_today()
-        if self.effective_date < today + timedelta(days=max(1, settings().minimum_notice_days)):
+        if self.effective_date < today + timedelta(days=1):
             raise ValueError('Choose a future start date that meets the notice period.')
         if self.effective_date > today + timedelta(days=366):
             raise ValueError('Choose a start date within the next year.')

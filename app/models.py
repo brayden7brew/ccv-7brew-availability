@@ -19,6 +19,12 @@ class User(Base):
     location: Mapped[str] = mapped_column(String(120))
     secondary_location: Mapped[str] = mapped_column(String(120), default='', server_default='')
 
+    minimum_hours_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default='true')
+    minimum_available_minutes: Mapped[int] = mapped_column(Integer, default=900, server_default='900')
+    notice_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default='true')
+    notice_days: Mapped[int] = mapped_column(Integer, default=14, server_default='14')
+    first_request_notice_exception: Mapped[bool] = mapped_column(Boolean, default=True, server_default='false')
+
 class Scope(Base):
     __tablename__ = 'manager_scopes'
     __table_args__ = (UniqueConstraint('manager_id', 'location'),)
