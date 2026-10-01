@@ -221,8 +221,8 @@ operator password reset, and disabling an account revoke access as before.
 
 ### Enable separate portal login for an imported employee
 In Admin, expand **Enable portal login / reset password** beneath the employee.
-Confirm their login email and choose **Create setup code**. Share the setup page
-and code directly with that employee. This version does not email setup codes.
+Confirm their login email and choose **Create setup code**. When email is enabled, leave the email checkbox selected to send the setup page
+and code to the employee. You can also share them directly.
 The employee enters the code at `/setup` and chooses a password (8+ characters).
 Codes expire after 24 hours, work once, and are replaced by a newly issued code.
 Only their hash is stored; they are never placed in URLs or the audit trail.

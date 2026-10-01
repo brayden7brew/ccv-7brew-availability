@@ -116,3 +116,31 @@ async def import_wiw(request: Request, db=Depends(get_db)):
         db.rollback()
         raise HTTPException(409, 'An employee signed in while importing. Run the import again.') from exc
     return RedirectResponse(f'/admin?imported={count}', 303)
+
+
+@router.post('/admin/email-test')
+async def email_test(request: Request, db=Depends(get_db)):
+    from types import SimpleNamespace
+    import secrets
+    from .config import settings
+    from .mailer import send_email
+    from starlette.concurrency import run_in_threadpool
+    actor=require_admin(request,db)
+    form=await request.form(max_fields=5)
+    csrf(request,form.get('csrf'))
+    cfg=settings()
+    if not cfg.email_enabled: raise HTTPException(422,'Email delivery is disabled.')
+    address=actor.notification_email or actor.email
+    if not valid_email(address): raise HTTPException(422,'Save your notification email before sending a test.')
+    from .main import limit_login
+    limit_login(request,db,'email-test:'+str(actor.id))
+    item=SimpleNamespace(id='test-'+secrets.token_hex(12),recipient=address,change_id=None,
+        subject='CCV 7 Brew Availability — email test',link=cfg.public_base_url.rstrip('/')+'/login',
+        link_label='Open CCV 7 Brew Availability',
+        body='Your portal can send emails through alerts@rva7brew.com. This test does not change availability.')
+    try: await run_in_threadpool(send_email,item)
+    except Exception as exc:
+        raise HTTPException(502,'Email delivery could not be confirmed. Check the Microsoft mail configuration and your inbox before trying again.') from None
+    db.add(AdminAudit(actor_id=actor.id,target_id=actor.id,details={'event':'test_email_accepted'}))
+    db.commit()
+    return RedirectResponse('/admin?email_test=accepted',303)

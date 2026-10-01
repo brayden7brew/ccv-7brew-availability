@@ -21,6 +21,9 @@ async def issue_setup(request: Request, user_id: int, db=Depends(get_db)):
     form=await request.form(max_fields=5)
     csrf(request,form.get('csrf'))
     email=str(form.get('email','')).strip().lower()
+    send_requested=form.get('send_email')=='on'
+    if send_requested and not settings().email_enabled:
+        raise HTTPException(422,'Email delivery is not enabled yet.')
     if not valid_email(email): raise HTTPException(422,'Enter a valid portal login email.')
     lock_admin_changes(db)
     db.refresh(actor)
@@ -37,8 +40,30 @@ async def issue_setup(request: Request, user_id: int, db=Depends(get_db)):
     db.add(AdminAudit(actor_id=actor.id,target_id=target.id,details={'event':'portal_setup_issued','login_email':email}))
     db.commit()
     base=settings().public_base_url.rstrip('/') or str(request.base_url).rstrip('/')
+    mail_status='not_sent'
+    if send_requested:
+        from types import SimpleNamespace
+        from starlette.concurrency import run_in_threadpool
+        from .mailer import send_email
+        item=SimpleNamespace(id='setup-'+secrets.token_hex(12), recipient=email,
+            subject='Set up your CCV 7 Brew portal password', change_id=None,
+            link=base+'/setup',link_label='Create your portal password',
+            body=f'Hi {target.name},\n\nYour administrator has enabled separate portal access.\n'
+                 f'Open {base}/setup and enter this one-time code:\n\n{code}\n\n'
+                 f'Your login email will be {email}. Choose your own password on that page. '
+                 'This code expires in 24 hours. Your When I Work password is unchanged. '
+                 'If you did not expect this email, contact your manager.')
+        try:
+            await run_in_threadpool(send_email,item)
+            mail_status='accepted'
+        except Exception:
+            # No provider bodies or setup codes in logs/audits. Delivery might be uncertain.
+            mail_status='uncertain'
+        db.add(AdminAudit(actor_id=actor.id,target_id=target.id,
+            details={'event':'portal_setup_email','status':mail_status}))
+        db.commit()
     return page(request,'portal_setup_created.html',user=actor,person=target,email=email,
-        setup_url=base+'/setup',setup_code=code)
+        setup_url=base+'/setup',setup_code=code,mail_status=mail_status)
 
 @router.get('/setup')
 def setup_page(request: Request):

@@ -11,8 +11,9 @@ class MicrosoftMailError(Exception):
 def send_graph(item, transport=None):
     cfg=settings()
     tenant=str(UUID(cfg.microsoft_tenant_id))
-    link=cfg.public_base_url.rstrip('/')+f'/requests/{item.change_id}'
-    body='<p>'+html.escape(item.body).replace('\n','<br>')+'</p><p><a href="'+html.escape(link,quote=True)+'">View request</a></p>'
+    link=getattr(item, 'link', '') or cfg.public_base_url.rstrip('/')+f'/requests/{item.change_id}'
+    label=getattr(item, 'link_label', 'View request')
+    body='<p>'+html.escape(item.body).replace('\n','<br>')+'</p><p><a href="'+html.escape(link,quote=True)+'">'+html.escape(label)+'</a></p>'
     try:
         with httpx.Client(timeout=20,follow_redirects=False,transport=transport) as client:
             auth=client.post(f'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token',data={

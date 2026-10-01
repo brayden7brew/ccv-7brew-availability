@@ -25,9 +25,10 @@ def send_email(item):
     message['Subject']=item.subject
     message['Message-ID']=f'<ccv-{item.id}@{cfg.email_from.split("@")[-1]}>'
     message.set_content(item.body)
-    link=cfg.public_base_url.rstrip('/')+f'/requests/{item.change_id}'
+    link=getattr(item, 'link', '') or cfg.public_base_url.rstrip('/')+f'/requests/{item.change_id}'
+    label=getattr(item, 'link_label', 'View availability request')
     message.add_alternative('<html><body><p>'+html.escape(item.body).replace('\n','<br>')+
-        '</p><p><a href="'+html.escape(link,quote=True)+'">View availability request</a></p></body></html>',subtype='html')
+        '</p><p><a href="'+html.escape(link,quote=True)+'">'+html.escape(label)+'</a></p></body></html>',subtype='html')
     connection=smtplib.SMTP_SSL(cfg.smtp_host,cfg.smtp_port,timeout=20,context=ssl.create_default_context()) if cfg.smtp_ssl else smtplib.SMTP(cfg.smtp_host,cfg.smtp_port,timeout=20)
     with connection as server:
         if not cfg.smtp_ssl: server.starttls(context=ssl.create_default_context())

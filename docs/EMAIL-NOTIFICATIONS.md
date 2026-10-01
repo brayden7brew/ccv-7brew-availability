@@ -23,3 +23,18 @@ For this Mac's existing installation use `../../work/venv/bin/python -m app.mail
 - Delivery retries up to five attempts with backoff. Admin shows queued/retry/sent/failed/missing-address counts. Errors contain exception types, never provider response bodies or secrets. SMTP acceptance does not prove inbox delivery. A crash after provider acceptance but before DB commit can result in a duplicate email; the message ID is stable. WIW writes are never retried by this worker.
 
 SMTP client reference: https://docs.python.org/3/library/smtplib.html
+
+## Activation and setup emails (October 1 update)
+The Render Blueprint enables `EMAIL_ENABLED=true` on the web service and worker,
+and sets `PUBLIC_BASE_URL=https://a.rva7brew.com`. After syncing and deploying,
+use **Admin → Send a test email to me**. This sends only to your own saved
+notification address (or portal login email). Provider acceptance is not proof
+of inbox delivery; check spam and Exchange message tracing if needed.
+
+**Enable portal login / reset password** now includes an email checkbox when
+email delivery is enabled. It emails the employee the setup page and 24-hour
+one-time code. The code is transmitted directly to the configured mail provider,
+not stored in the outbox or audit. Setup emails are sent once immediately; if
+provider acceptance is uncertain, share the displayed instructions or issue a
+new code. Reissuing invalidates the older code. Availability notifications
+continue to use the durable worker outbox and retries.

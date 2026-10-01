@@ -30,7 +30,7 @@ services:
       - key: WIW_MODE
         value: live
       - key: ALLOWED_HOSTS
-        sync: false
+        value: a.rva7brew.com,availability-portal.onrender.com
       - key: WIW_TOKEN
         sync: false
       - key: WIW_CONTEXT_USER_ID
@@ -46,7 +46,7 @@ services:
       - key: WIW_AUTO_ENROLL_LOCATION
         value: '7 Brew- Test Site'
       - key: EMAIL_ENABLED
-        value: 'false'
+        value: 'true'
       - key: EMAIL_PROVIDER
         value: microsoft_graph
       - key: EMAIL_FROM
@@ -58,7 +58,7 @@ services:
       - key: MICROSOFT_CLIENT_SECRET
         sync: false
       - key: PUBLIC_BASE_URL
-        sync: false
+        value: https://a.rva7brew.com
   - type: worker
     name: availability-email-worker
     runtime: python
