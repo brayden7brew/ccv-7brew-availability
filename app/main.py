@@ -33,6 +33,10 @@ app.mount('/static', StaticFiles(directory=root/'static'), name='static')
 templates = Jinja2Templates(directory=root/'templates')
 from .weekly import week_totals
 templates.env.globals['week_totals'] = week_totals
+from .availability_rules import counted_minutes
+from .presentation import clock_label, date_label, local_datetime
+templates.env.globals['counted_minutes'] = counted_minutes
+templates.env.filters.update(clock_label=clock_label, date_label=date_label, local_datetime=local_datetime)
 from .admin import router as admin_router
 app.include_router(admin_router)
 from .portal_setup import router as portal_setup_router
@@ -250,7 +254,9 @@ def detail(request: Request, change_id: int, db=Depends(get_db)):
     if not change or not allowed(db, user, change): raise HTTPException(404, 'Request not found.')
     employee = db.get(User, change.employee_id)
     history = db.scalars(select(Audit).where(Audit.change_id == change.id).order_by(Audit.id)).all()
-    return page(request, 'detail.html', user=user, change=change, employee=employee, history=history, days=DAYS, usage=request_usage(db, employee.id))
+    actor_ids = {entry.actor_id for entry in history if entry.actor_id}
+    actor_names = dict(db.execute(select(User.id, User.name).where(User.id.in_(actor_ids))).all())
+    return page(request, 'detail.html', user=user, change=change, employee=employee, history=history, actor_names=actor_names, days=DAYS, usage=request_usage(db, employee.id))
 
 @app.post('/requests/{change_id}/decision')
 async def decision(request: Request, change_id: int, db=Depends(get_db)):

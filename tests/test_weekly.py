@@ -178,7 +178,7 @@ def test_unmanaged_preferences_are_not_deleted(client,db,monkeypatch):
 def test_stale_server_template_never_shows_empty_submittable_week():
     from app.main import templates, cfg
     html=templates.env.get_template('new.html').render(cfg=cfg, csrf='test')
-    assert 'Restart the portal' in html
+    assert 'This form is temporarily unavailable.' in html
     assert 'Submit weekly availability' not in html
     assert '<form method="post" action="/requests"' not in html
 

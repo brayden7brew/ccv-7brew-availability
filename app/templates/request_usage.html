@@ -1,3 +1,3 @@
 <section class="card" aria-label="Request allowance"><strong>{{ usage.count }} request{{ '' if usage.count == 1 else 's' }} in the last 30 days</strong>
-{% if usage.limit %}<p class="muted">Limit: {{ usage.limit }} · {{ usage.remaining }} remaining.{% if usage.blocked %} Next request available {{ usage.reset.strftime('%b %d, %Y at %H:%M UTC') }}.{% endif %}</p>{% else %}<p class="muted">No request limit is currently set.</p>{% endif %}
+{% if usage.limit %}<p class="muted">Limit: {{ usage.limit }} · {{ usage.remaining }} remaining.{% if usage.blocked %} Next request available {{ usage.reset|local_datetime }}.{% endif %}</p>{% else %}<p class="muted">No request limit is currently set.</p>{% endif %}
 <small>Counts submitted weekly requests, including pending and declined requests. Each leaves the count after 30 days.</small></section>

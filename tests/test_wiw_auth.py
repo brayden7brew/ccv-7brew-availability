@@ -76,7 +76,7 @@ def test_manager_permissions_preserved(client,db,monkeypatch,auth_config):
     monkeypatch.setattr(WIWAuth,'authenticate',lambda self,email,password:2)
     csrf=token(client.get('/login/wiw'))
     response=client.post('/login/wiw',data={'csrf':csrf,'email':'actual-manager@example.com','password':'test'})
-    assert 'MANAGER WORKSPACE' in response.text.upper()
+    assert 'TEAM AVAILABILITY' in response.text.upper()
     assert db.get(User,2).role=='manager'
 
 @pytest.mark.parametrize('local_state',['disabled','unprovisioned'])

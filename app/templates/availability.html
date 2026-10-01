@@ -1,7 +1,7 @@
 {% extends 'base.html' %}{% from 'weekly_table.html' import week_table %}{% block content %}
 <div class="heading"><div><p class="eyebrow">SUNDAY THROUGH SATURDAY</p><h1>My weekly availability</h1><p>Your approved hours repeat until the next approved schedule starts.</p></div><a class="button" href="/requests/new">Change my weekly hours</a></div>
 {% if cfg.dry_run %}<p class="muted">These are simulated approvals for testing. Your real WIW availability is unchanged.</p>{% endif %}
-<section class="card"><h2>Current approved hours</h2>{% if current %}<p>Started {{ current.effective_date }}</p>{{ week_table(current, days) }}{% else %}<p>No weekly schedule has taken effect in this portal yet.</p>{% endif %}</section>
-{% for schedule in upcoming %}<section class="card"><span class="badge">Approved · starts {{ schedule.effective_date }}</span>{{ week_table(schedule, days) }}<a href="/requests/{{ schedule.change_id }}">View approval</a></section>{% endfor %}
-<details class="card"><summary>Existing When I Work preferences (next 90 days)</summary>{% for event in events %}<p>{{ event.start_time }} → {{ event.end_time }} · {{ 'Unavailable' if event.type == 1 else 'Preferred' }}</p>{% else %}<p>No WIW preferences in this range.</p>{% endfor %}</details>
+<section class="card"><h2>Current approved hours</h2>{% if current %}<p>Started {{ current.effective_date|date_label }}</p>{{ week_table(current, days) }}{% else %}<p>No weekly schedule has taken effect in this portal yet.</p>{% endif %}</section>
+{% for schedule in upcoming %}<section class="card"><span class="badge">Approved · starts {{ schedule.effective_date|date_label }}</span>{{ week_table(schedule, days) }}<a href="/requests/{{ schedule.change_id }}">View approval</a></section>{% endfor %}
+<details class="card"><summary>Existing When I Work preferences (next 90 days)</summary>{% for event in events %}<p>{{ event.start_time|local_datetime }} → {{ event.end_time|local_datetime }} · {{ 'Unavailable' if event.type == 1 else 'Preferred' }}</p>{% else %}<p>No When I Work preferences found for these dates.</p>{% endfor %}</details>
 {% endblock %}

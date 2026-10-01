@@ -20,7 +20,7 @@ def test_setup_email_link_and_code_not_audited(client,db,monkeypatch):
     assert sent[0].recipient=='e@example.com'
     assert sent[0].link=='https://a.rva7brew.com/setup'
     assert code not in str([a.details for a in db.scalars(select(AdminAudit))])
-    assert 'accepted the setup email' in response.text
+    assert 'accepted for delivery' in response.text
 
 
 def test_email_failure_retains_manual_setup(client,db,monkeypatch):
