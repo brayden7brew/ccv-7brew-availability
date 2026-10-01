@@ -5,7 +5,7 @@ from .db import get_db
 from .models import User, Scope, Change, AdminAudit, Location, EmailOutbox, WebhookBatch
 from .security import current_user, csrf
 
-from .locations import location_choices, lock_admin_changes, check_admin_cap
+from .locations import assigned_locations, location_choices, lock_admin_changes, check_admin_cap
 from .notifications import valid_email
 
 router = APIRouter()
@@ -47,6 +47,7 @@ def admin_page(request: Request, db=Depends(get_db)):
     ids={v for h in history for v in (h.actor_id,h.target_id)}
     names=dict(db.execute(select(User.id,User.name).where(User.id.in_(ids))).all()) if ids else {}
     return page(request,'admin.html',user=actor,people=people,history=history,names=names,
+        notification_scopes=sorted(set(db.scalars(select(Scope.location).where(Scope.manager_id==actor.id))) | set(assigned_locations(actor))),
         locations=location_choices(db),filters=filters,directory_query=query,total=total,page_number=number,pages=pages,
         previous_url=page_url(number-1),next_url=page_url(number+1),
         admin_count=db.scalar(select(func.count()).select_from(User).where(User.role=='admin')),
@@ -213,3 +214,21 @@ async def update_rules(request:Request,user_id:int,db=Depends(get_db)):
     db.add(AdminAudit(actor_id=actor.id,target_id=person.id,details={'event':'availability_rules_updated','before':before,'after':{k:getattr(person,k) for k in keys}}))
     db.commit()
     return RedirectResponse(f'/admin/users/{user_id}?'+directory_filters(request)[1]+'&saved=1',303)
+
+@router.post('/admin/my-notifications')
+async def my_notifications(request: Request, db=Depends(get_db)):
+    actor = require_admin(request, db)
+    form = await request.form(max_fields=200)
+    csrf(request, form.get('csrf'))
+    locations = sorted(set(form.getlist('notification_locations')))
+    permitted = set(db.scalars(select(Scope.location).where(Scope.manager_id==actor.id))) | set(assigned_locations(actor))
+    if not set(locations) <= permitted:
+        raise HTTPException(422, 'Choose only your own or approval locations.')
+    before = {'enabled':actor.notifications_enabled, 'locations':actor.notification_locations}
+    actor.notifications_enabled = form.get('notifications_enabled') == 'on'
+    actor.notification_locations = locations
+    db.add(AdminAudit(actor_id=actor.id,target_id=actor.id,details={
+        'event':'notification_preferences','before':before,
+        'after':{'enabled':actor.notifications_enabled,'locations':locations}}))
+    db.commit()
+    return RedirectResponse('/admin?notifications_saved=1',303)

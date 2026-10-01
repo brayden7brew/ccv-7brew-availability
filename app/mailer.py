@@ -11,7 +11,7 @@ from .config import settings
 from .db import SessionLocal
 from .models import EmailOutbox, User, Scope, Change, now
 from .locations import assigned_locations
-from .notifications import valid_email
+from .notifications import valid_email, wants_notifications
 
 
 def send_email(item):
@@ -47,7 +47,7 @@ def process_batch(factory=SessionLocal,sender=send_email):
             user=db.get(User,item.recipient_id)
             change=db.get(Change,item.change_id)
             # Recheck current permission so revoked managers never get queued notifications.
-            permitted=bool(user and user.active and change)
+            permitted=bool(user and user.active and change and wants_notifications(user, change))
             if permitted and item.event=='submitted':
                 permitted=user.role in ('manager','admin') and user.id!=change.employee_id and bool(db.scalar(select(Scope.id).where(
                     Scope.manager_id==user.id,Scope.location.in_(assigned_locations(change))))) and change.status=='pending'

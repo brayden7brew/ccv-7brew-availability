@@ -273,3 +273,5 @@ already-submitted requests. Webhook updates preserve these individual settings.
 
 ### Live form validation
 The weekly form requires JavaScript and validates dates, daily time windows, counted minimum hours, and request limits before enabling Send. It shows a live counted-hours total and errors beside daily time fields. Only a local script is allowed on the two weekly-form routes; inline and third-party scripts remain blocked. Server validation remains authoritative, including updated employee rules, and returns invalid submissions on the same form with entered values preserved. A WIW read failure also preserves the form without creating a request.
+
+Administrators can use **Admin → My notifications** to disable their own automatic availability emails or select locations. These settings do not change approval access or anyone else’s notifications. Manager request emails require a matching approval location, checked both when queued and before delivery. Explicitly requested setup/test emails are separate from automatic availability notifications. Deploys run the notification-preferences migration automatically.

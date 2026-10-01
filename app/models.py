@@ -11,6 +11,8 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(254), unique=True)
     notification_email: Mapped[str] = mapped_column(String(254), default='', server_default='')
+    notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default='true')
+    notification_locations: Mapped[list | None] = mapped_column(JSON, nullable=True)
     name: Mapped[str] = mapped_column(String(120))
     password_hash: Mapped[str] = mapped_column(Text)
     role: Mapped[str] = mapped_column(String(20), default='employee')

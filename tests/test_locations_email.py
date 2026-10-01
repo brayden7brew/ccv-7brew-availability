@@ -84,3 +84,45 @@ def test_disabled_email_and_approved_test_message(client,db,monkeypatch):
     sent=[]
     assert process_batch(factory,lambda row:sent.append(row.recipient))==1
     assert sent==['employee@example.com']
+
+
+def test_admin_personal_preferences_and_queued_delivery(client,db,monkeypatch):
+    from test_portal import token
+    enable(monkeypatch)
+    monkeypatch.setattr(settings(),'availability_request_limit_30_days',0)
+    admin=db.get(User,2); admin.role='admin'; admin.notification_email='admin@example.com'
+    db.get(User,3).notification_email='south@example.com'
+    db.add(Scope(manager_id=2,location='South')); db.commit()
+    submit(client)
+    assert {r.recipient_id for r in db.scalars(select(EmailOutbox))}=={2}
+    sign_in(client,'manager@test.local')
+    page=client.get('/admin')
+    assert 'My notifications' in page.text
+    csrf=token(page)
+    response=client.post('/admin/my-notifications',data={'csrf':csrf,'notification_locations':'North'})
+    assert response.status_code==200
+    assert not db.get(User,2).notifications_enabled
+    assert db.get(User,3).notifications_enabled
+    factory=sessionmaker(bind=db.get_bind(),expire_on_commit=False)
+    sent=[]
+    process_batch(factory,lambda item:sent.append(item.recipient_id))
+    db.expire_all()
+    assert not sent and db.scalar(select(EmailOutbox)).status=='cancelled'
+    csrf=token(client.get('/admin'))
+    assert client.post('/admin/my-notifications',data={'csrf':csrf,'notifications_enabled':'on','notification_locations':'South'}).status_code==200
+    assert set(db.scalars(select(Scope.location).where(Scope.manager_id==2)))=={'North','South'}
+    submit(client)
+    assert not db.scalar(select(EmailOutbox.id).where(EmailOutbox.change_id==2))
+    db.get(User,1).secondary_location='South'; db.commit()
+    submit(client)
+    assert {r.recipient_id for r in db.scalars(select(EmailOutbox).where(EmailOutbox.change_id==3))}=={2,3}
+
+
+def test_notification_preferences_require_admin_and_valid_locations(client,db):
+    from test_portal import token
+    csrf=sign_in(client,'manager@test.local')
+    assert client.post('/admin/my-notifications',data={'csrf':csrf}).status_code==403
+    db.get(User,2).role='admin'; db.commit()
+    csrf=token(client.get('/admin'))
+    assert client.post('/admin/my-notifications',data={'csrf':csrf,'notification_locations':'South'}).status_code==422
+    assert client.post('/admin/my-notifications',data={'notifications_enabled':'on'}).status_code==403

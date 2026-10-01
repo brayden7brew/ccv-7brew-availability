@@ -11,6 +11,13 @@ def valid_email(value):
         and not value.lower().endswith(('.invalid','.test','.local')))
 
 
+def wants_notifications(user, change):
+    if user.role != 'admin':
+        return True
+    return user.notifications_enabled and (user.notification_locations is None or
+        bool(set(user.notification_locations) & set(assigned_locations(change))))
+
+
 def enqueue_notifications(db, change, event):
     cfg=settings()
     if not cfg.email_enabled:
@@ -37,6 +44,7 @@ def enqueue_notifications(db, change, event):
         if change.manager_note: text+=f'\n\nManager note: {change.manager_note}'
     link=cfg.public_base_url.rstrip('/')+f'/requests/{change.id}'
     for user in recipients:
+        if not wants_notifications(user, change): continue
         if db.scalar(select(EmailOutbox.id).where(EmailOutbox.change_id==change.id,
                 EmailOutbox.recipient_id==user.id,EmailOutbox.event==event)):
             continue
