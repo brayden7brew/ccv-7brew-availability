@@ -200,7 +200,7 @@ def availability(request: Request, db=Depends(get_db)):
 def new(request: Request, db=Depends(get_db)):
     user = current_user(request, db)
     rows = timeline(db, user.id, cfg.dry_run)
-    defaults = rows[-1].days if rows else [{'mode':'hours','start':'','end':''} for _ in DAYS]
+    defaults = rows[-1].days if rows else [{'mode':'none','start':'','end':''} for _ in DAYS]
     return page(request, 'new.html', user=user, days=DAYS, defaults=defaults,
         usage=request_usage(db, user.id), rules=employee_rules(db,user), earliest=employee_rules(db,user)['earliest'].isoformat())
 
