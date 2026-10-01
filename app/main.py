@@ -1,4 +1,5 @@
 import secrets
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -22,6 +23,8 @@ from .weekly import WeeklyInput, DAYS, timeline, timeline_ids, display_schedule,
 from .wiw import WIW, WIWError
 from .wiw_auth import WIWAuth, WIWAuthError
 from .workflow import allowed, audit, decide
+
+logger = logging.getLogger(__name__)
 
 cfg = settings()
 app = FastAPI(title='CCV 7 Brew Availability', docs_url=None, redoc_url=None, openapi_url=None)
@@ -259,8 +262,19 @@ async def submit(request: Request, db=Depends(get_db)):
     first, last = begin.isoformat(), end.isoformat()
     try:
         before = WIW().read(user.wiw_user_id, first, last)
-    except WIWError:
-        return invalid('When I Work is temporarily unavailable. Your request has not been submitted. Please try again later.', 503)
+    except WIWError as exc:
+        reference = secrets.token_hex(6)
+        logger.warning('WIW availability read failed: reference=%s reason=%s http_status=%s wiw_code=%s',
+            reference, exc.reason, exc.http_status, exc.wiw_code)
+        if exc.http_status in (401,403):
+            explanation = 'The portal could not access When I Work. Ask your administrator to check the connection.'
+        elif exc.reason == 'availability_changed':
+            explanation = 'Your When I Work availability changed while it was loading. Please try again.'
+        elif exc.reason in ('timeout','connection_error') or exc.http_status == 429 or (exc.http_status and exc.http_status >= 500):
+            explanation = 'When I Work could not be reached right now. Please try again later.'
+        else:
+            explanation = 'We could not load your current availability from When I Work. Ask your administrator to check the connection.'
+        return invalid(f'{explanation} Your request has not been submitted. Your entries are kept below. Reference: {reference}.', 503)
     prior = next((r for r in reversed(rows) if r.effective_date <= data.effective_date), None)
     before.update(timeline_ids=timeline_ids(rows), schedule=display_schedule(prior), dry_run=cfg.dry_run)
     change = Change(employee_id=user.id, location=user.location, secondary_location=user.secondary_location, wiw_user_id=user.wiw_user_id,

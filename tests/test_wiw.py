@@ -144,3 +144,17 @@ def test_error_explanation_redacts_credentials_and_email(monkeypatch):
     assert 'Invalid recurrence' in message
     for secret in ('server-only-secret', 'developer-private', 'person@example.com', 'never-show-this'):
         assert secret not in message
+
+
+def test_error_metadata_distinguishes_auth_timeout_and_invalid_response(monkeypatch):
+    live(monkeypatch)
+    cases=[(httpx.Response(401,json={'code':1000,'error':'denied'}),'http_error',401,1000),
+           (httpx.Response(200,text='invalid'),'invalid_response',None,None)]
+    for response,reason,status,code in cases:
+        with pytest.raises(WIWError) as caught:
+            WIW(httpx.MockTransport(lambda request:response)).read(20,'2030-01-01','2030-01-15')
+        assert (caught.value.reason,caught.value.http_status,caught.value.wiw_code)==(reason,status,code)
+    def timeout(request): raise httpx.ReadTimeout('private request details',request=request)
+    with pytest.raises(WIWError) as caught:
+        WIW(httpx.MockTransport(timeout)).read(20,'2030-01-01','2030-01-15')
+    assert caught.value.reason=='timeout'

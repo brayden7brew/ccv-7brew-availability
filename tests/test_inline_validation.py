@@ -57,3 +57,21 @@ def test_form_script_is_local_and_disabled_until_validated(client):
     assert "script-src 'self'" in response.headers['content-security-policy']
     assert 'unsafe-inline' not in response.headers['content-security-policy']
     assert "script-src 'none'" in client.get('/').headers['content-security-policy']
+
+
+def test_wiw_diagnostics_report_codes_without_credentials_or_upstream_text(client,db,monkeypatch,caplog):
+    import logging
+    values=form(client);values.update(day_1_mode='all_day')
+    class Denied:
+        def read(self,*args):
+            raise WIWError('upstream private token and employee details',reason='http_error',http_status=401,wiw_code=1000)
+    monkeypatch.setattr('app.main.WIW',Denied)
+    with caplog.at_level(logging.WARNING):
+        response=client.post('/requests',data=values)
+    assert response.status_code==503 and 'Ask your administrator to check the connection' in response.text
+    assert 'http_status=401 wiw_code=1000' in caplog.text
+    assert 'upstream private' not in response.text+caplog.text
+    import re
+    reference=re.search(r'Reference: ([a-f0-9]+)',response.text)[1]
+    assert f'reference={reference}' in caplog.text
+    assert db.query(Change).count()==0

@@ -7,7 +7,12 @@ from dateutil.parser import parse
 from .config import settings
 
 class WIWError(Exception):
-    pass
+    def __init__(self, message, *, reason='unknown', http_status=None, wiw_code=None):
+        super().__init__(message)
+        # Structured diagnostics never contain response bodies, headers, or tokens.
+        self.reason = reason
+        self.http_status = http_status
+        self.wiw_code = wiw_code
 
 class WIW:
     def __init__(self, transport=None):
@@ -42,13 +47,18 @@ class WIW:
                 except ValueError:
                     pass
                 suffix = f' (WIW code {code})' if code is not None else ''
-                raise WIWError(f'WIW returned HTTP {response.status_code}{suffix}. ' + (explanation or 'Contact the portal operator.'))
+                raise WIWError(f'WIW returned HTTP {response.status_code}{suffix}. ' + (explanation or 'Contact the portal operator.'),
+                    reason='http_error', http_status=response.status_code, wiw_code=code)
             result = response.json()
             if not isinstance(result, dict):
                 raise ValueError()
             return result
-        except (httpx.HTTPError, ValueError) as exc:
-            raise WIWError('WIW response unavailable or invalid. Contact the portal operator.') from exc
+        except httpx.TimeoutException as exc:
+            raise WIWError('When I Work took too long to respond.', reason='timeout') from exc
+        except httpx.HTTPError as exc:
+            raise WIWError('Could not connect to When I Work.', reason='connection_error') from exc
+        except ValueError as exc:
+            raise WIWError('When I Work returned an invalid response.', reason='invalid_response') from exc
 
     def read(self, user_id, start, end):
         if self.cfg.wiw_mode == 'demo':
@@ -62,7 +72,7 @@ class WIW:
             if last <= first:
                 raise ValueError()
         except (ValueError, TypeError, OverflowError) as exc:
-            raise WIWError('Invalid availability date range.') from exc
+            raise WIWError('Invalid availability date range.', reason='invalid_date_range') from exc
         # WIW error 2002 confirms a maximum of 95 days per request. Use 90
         # elapsed days, sharing boundaries, so there are no gaps or DST overruns.
         # Recurring events may appear in several windows; retain each ID once.
@@ -74,15 +84,15 @@ class WIW:
                 'user_id': user_id, 'start': cursor.isoformat(), 'end': boundary.isoformat()})
             events = result.get('availabilityevents')
             if not isinstance(events, list):
-                raise WIWError('WIW returned an unexpected event list.')
+                raise WIWError('WIW returned an unexpected event list.', reason='invalid_event_list')
             for event in events:
                 if (not isinstance(event, dict) or type(event.get('id')) is not int
                         or event.get('user_id') != user_id
                         or event.get('account_id') != self.cfg.wiw_account_id):
-                    raise WIWError('WIW returned an unexpected account/user or event list.')
+                    raise WIWError('WIW returned an unexpected account/user or event list.', reason='event_identity_mismatch')
                 event_id = event['id']
                 if event_id in by_id and by_id[event_id] != event:
-                    raise WIWError('WIW availability changed while loading. Reload and try again.')
+                    raise WIWError('WIW availability changed while loading. Reload and try again.', reason='availability_changed')
                 by_id[event_id] = event
             cursor = boundary
         return {'availabilityevents': [by_id[key] for key in sorted(by_id)]}
