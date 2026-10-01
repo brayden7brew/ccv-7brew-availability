@@ -133,7 +133,16 @@ class WIW:
         if operation['action'] == 'delete':
             result = self.call('DELETE', f"/2/availabilityevents/{operation['event_id']}")
             if result.get('success') is not True:
-                raise WIWError('WIW deletion could not be verified.')
+                # Some successful responses do not use the documented success flag.
+                # Verify absence without ever issuing a second DELETE.
+                try:
+                    self.get(operation['event_id'], change.wiw_user_id)
+                except WIWError as exc:
+                    if exc.reason != 'http_error' or exc.http_status != 404:
+                        raise WIWError('WIW deletion could not be verified.', reason='delete_unconfirmed') from exc
+                else:
+                    raise WIWError('WIW still returns the event after deletion.', reason='delete_unconfirmed')
+                result = {'success':True, 'verified_by':'event_get_404'}
         elif operation['action'] == 'update':
             result = self.call('PUT', f"/2/availabilityevents/{operation['event_id']}", payload={
                 **operation['payload'], 'user_id':change.wiw_user_id, 'account_id':self.cfg.wiw_account_id})

@@ -33,6 +33,8 @@ def main():
     scope.add_argument('--remove', action='store_true')
     commands.add_parser('cleanup')
     commands.add_parser('unresolved')
+    inspect = commands.add_parser('inspect-request')
+    inspect.add_argument('--id', type=int, required=True)
     reconcile = commands.add_parser('reconcile')
     reconcile.add_argument('--id', type=int, required=True)
     reconcile.add_argument('--manager-email', required=True)
@@ -65,6 +67,41 @@ def main():
         elif args.command == 'unresolved':
             for c in db.scalars(select(Change).where(Change.status.in_(['applying','needs_reconciliation']))):
                 print(f'#{c.id} employee={c.employee_id} status={c.status}')
+        elif args.command == 'inspect-request':
+            from .models import Audit
+            from .wiw import WIWError
+            from .workflow import canonical
+            change = db.get(Change, args.id)
+            if not change: raise SystemExit('Request not found.')
+            provider = WIW()
+            approval = db.scalars(select(Audit).where(Audit.change_id == change.id,
+                Audit.event == 'approved').order_by(Audit.id.desc())).first()
+            entries = db.scalars(select(Audit).where(Audit.change_id == change.id,
+                Audit.event.in_(['operation_started','operation_succeeded','write_uncertain'])).order_by(Audit.id)).all()
+            print(f'Request #{change.id}: {change.status}')
+            try:
+                current = provider.read(change.wiw_user_id, change.read_start, change.read_end)
+            except WIWError as exc:
+                raise SystemExit(f'Read failed: reason={exc.reason} http_status={exc.http_status} wiw_code={exc.wiw_code}')
+            before = approval.details['pre_write_state'] if approval else change.before
+            print(f"Matches pre-write state: {canonical(current) == canonical(before)}")
+            print('Current WIW event IDs: ' + ', '.join(str(e['id']) for e in current['availabilityevents']))
+            for entry in entries:
+                index = entry.details.get('index')
+                print(f'Operation {index}: {entry.event}')
+                if entry.event != 'operation_started': continue
+                operation = entry.details['operation']
+                event_id = operation.get('event_id')
+                if event_id is None: continue
+                try:
+                    provider.get(event_id, change.wiw_user_id)
+                    state = 'present'
+                except WIWError as exc:
+                    state = ('absent (HTTP 404)' if exc.reason == 'http_error' and exc.http_status == 404
+                             else f'unknown: reason={exc.reason} http_status={exc.http_status} wiw_code={exc.wiw_code}')
+                print(f"  {operation['action']} event {event_id}: {state}")
+            print('Read-only inspection. No WIW writes or request status changes.')
+            return
         elif args.command == 'reconcile':
             change = db.scalar(select(Change).where(Change.id == args.id).with_for_update())
             actor = db.scalar(select(User).where(User.email == args.manager_email.lower(), User.role.in_(['manager','admin']), User.active.is_(True)))

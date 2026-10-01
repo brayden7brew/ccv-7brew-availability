@@ -230,3 +230,20 @@ def test_weekly_update_verifies_saved_recurrence(monkeypatch,unchanged):
     if unchanged:
         with pytest.raises(WIWError): provider.weekly_operation(change,operation)
     else: assert provider.weekly_operation(change,operation)['availabilityevents']==[event]
+
+
+@pytest.mark.parametrize('read_status',[404,200,403,500])
+def test_unusual_delete_response_requires_verified_absence(monkeypatch,read_status):
+    live(monkeypatch)
+    calls=[]
+    def handle(request):
+        calls.append(request.method)
+        if request.method=='DELETE': return httpx.Response(200,json={'success':1})
+        return httpx.Response(read_status,json={'availabilityevent':{'id':77,'user_id':20,'account_id':10}})
+    provider=WIW(httpx.MockTransport(handle))
+    change=SimpleNamespace(action='weekly',status='applying',manager_id=2,dry_run=False,wiw_user_id=20)
+    if read_status==404:
+        assert provider.weekly_operation(change,{'action':'delete','event_id':77})=={'success':True,'verified_by':'event_get_404'}
+    else:
+        with pytest.raises(WIWError): provider.weekly_operation(change,{'action':'delete','event_id':77})
+    assert calls==['DELETE','GET']
