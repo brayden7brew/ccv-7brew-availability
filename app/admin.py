@@ -61,11 +61,26 @@ def person_page(request: Request,user_id:int,db=Depends(get_db)):
     actor=require_admin(request,db)
     person=db.get(User,user_id)
     if not person: raise HTTPException(404,'Employee not found.')
+    from .weekly import local_today
+    from .wiw import WIW, WIWError
+    from .availability_preview import preview
+    from .main import date_range
+    from datetime import timedelta
+    today = local_today()
+    availability_rows = []
+    availability_error = False
+    try:
+        first,last = date_range(today.isoformat(), (today+timedelta(days=7)).isoformat())
+        state = WIW().read(person.wiw_user_id,first,last)
+        availability_rows = preview(state['availabilityevents'],today)
+    except (WIWError, ValueError, KeyError, TypeError, OverflowError):
+        availability_error = True
     _,query=directory_filters(request)
     history=list(db.scalars(select(AdminAudit).where(AdminAudit.target_id==user_id).order_by(AdminAudit.id.desc()).limit(20)))
     ids={h.actor_id for h in history}
     names=dict(db.execute(select(User.id,User.name).where(User.id.in_(ids))).all()) if ids else {}
     return page(request,'admin_person.html',user=actor,person=person,locations=location_choices(db),
+        availability_rows=availability_rows,availability_error=availability_error,
         scopes={person.id:list(db.scalars(select(Scope.location).where(Scope.manager_id==user_id)))},
         directory_query=query,back_url='/admin'+('?' + query if query else ''),history=history,names=names)
 
