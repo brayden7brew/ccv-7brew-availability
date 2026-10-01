@@ -15,7 +15,7 @@ def allowed(db, user, change):
     if user.id == change.employee_id:
         return True
     return user.role in ('manager', 'admin') and db.scalar(select(Scope.id).where(
-        Scope.manager_id == user.id, Scope.location.in_(assigned_locations(change)))) is not None
+        Scope.manager_id == user.id, Scope.location == change.location)) is not None
 
 def canonical(state):
     return json.dumps(sorted(state['availabilityevents'], key=lambda x: x['id']), sort_keys=True)
@@ -36,7 +36,7 @@ def decide(db, actor, change_id, decision, note, provider=None, replace_existing
         raise HTTPException(409, 'This request has already been decided.')
     if decision not in ('approve', 'reject') or len(note) > 2000 or (decision == 'reject' and not note.strip()):
         raise HTTPException(422, 'Choose approve/reject and include a reason when rejecting.')
-    if not employee.active or employee.wiw_user_id != change.wiw_user_id or set(assigned_locations(employee)) != set(assigned_locations(change)):
+    if employee.location != change.location or not employee.active or employee.wiw_user_id != change.wiw_user_id or set(assigned_locations(employee)) != set(assigned_locations(change)):
         raise HTTPException(409, 'Employee mapping changed. Submit a new request.')
     if decision == 'reject':
         change.status, change.manager_id, change.manager_note = 'rejected', actor.id, note

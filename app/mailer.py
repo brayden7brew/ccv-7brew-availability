@@ -50,7 +50,7 @@ def process_batch(factory=SessionLocal,sender=send_email):
             permitted=bool(user and user.active and change and wants_notifications(user, change))
             if permitted and item.event=='submitted':
                 permitted=user.role in ('manager','admin') and user.id!=change.employee_id and bool(db.scalar(select(Scope.id).where(
-                    Scope.manager_id==user.id,Scope.location.in_(assigned_locations(change))))) and change.status=='pending'
+                    Scope.manager_id==user.id,Scope.location == change.location))) and change.status=='pending'
             if not permitted:
                 item.status='cancelled'; db.commit(); continue
             address=user.notification_email or user.email

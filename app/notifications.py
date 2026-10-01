@@ -15,7 +15,7 @@ def wants_notifications(user, change):
     if user.role != 'admin':
         return True
     return user.notifications_enabled and (user.notification_locations is None or
-        bool(set(user.notification_locations) & set(assigned_locations(change))))
+        change.location in user.notification_locations)
 
 
 def enqueue_notifications(db, change, event):
@@ -27,7 +27,7 @@ def enqueue_notifications(db, change, event):
         recipients=list(db.scalars(select(User).where(
             User.active.is_(True), User.role.in_(['manager','admin']), User.id!=employee.id,
             select(Scope.id).where(Scope.manager_id==User.id,
-                Scope.location.in_(assigned_locations(change))).exists())))
+                Scope.location == change.location).exists())))
         subject=f'{employee.name} requested an availability change'
         text=f'{employee.name} submitted new weekly availability starting {change.proposed.get("effective_date", "the requested date")}.\nLocations: {", ".join(assigned_locations(change))}.\nPlease sign in to review and approve or decline.'
     else:

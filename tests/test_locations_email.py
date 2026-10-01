@@ -15,14 +15,14 @@ def enable(monkeypatch):
     monkeypatch.setattr(settings(),'public_base_url','https://portal.example.com')
 
 
-def test_secondary_manager_can_see_and_decide_once(client,db):
+def test_only_primary_manager_can_see_and_decide(client,db):
     db.get(User,1).secondary_location='South';db.commit()
     submit(client)
     sign_in(client,'other@test.local')
-    assert client.get('/requests/1').status_code==200
-    assert 'employee' in client.get('/').text
-    decide(db,db.get(User,3),1,'approve','',Fake())
-    with pytest.raises(HTTPException): decide(db,db.get(User,2),1,'approve','',Fake())
+    assert client.get('/requests/1').status_code==404
+    assert '/requests/1' not in client.get('/').text
+    with pytest.raises(HTTPException): decide(db,db.get(User,3),1,'approve','',Fake())
+    decide(db,db.get(User,2),1,'approve','',Fake())
 
 
 def test_five_admin_cap_and_self_demotion(client,db):
@@ -38,17 +38,17 @@ def test_five_admin_cap_and_self_demotion(client,db):
     assert client.post('/admin/users/1',data=data).status_code==422
 
 
-def test_notifications_both_locations_dedup_and_decision(client,db,monkeypatch):
+def test_notifications_primary_only_and_decision(client,db,monkeypatch):
     enable(monkeypatch)
     for i in (1,2,3): db.get(User,i).notification_email=f'user{i}@example.com'
     db.get(User,1).secondary_location='South'
     db.add(Scope(manager_id=2,location='South'));db.commit()
     submit(client)
     rows=list(db.scalars(select(EmailOutbox)))
-    assert len(rows)==2 and {r.recipient_id for r in rows}=={2,3}
+    assert len(rows)==1 and {r.recipient_id for r in rows}=={2}
     assert all('employee' in r.subject and 'https://portal.example.com/requests/1' in r.body for r in rows)
     enqueue_notifications(db,db.get(Change,1),'submitted');db.commit()
-    assert len(list(db.scalars(select(EmailOutbox))))==2
+    assert len(list(db.scalars(select(EmailOutbox))))==1
     decide(db,db.get(User,2),1,'reject','Please speak with me',Fake())
     item=db.scalar(select(EmailOutbox).where(EmailOutbox.event=='rejected'))
     assert item.recipient_id==1 and 'Please speak with me' in item.body
@@ -115,7 +115,7 @@ def test_admin_personal_preferences_and_queued_delivery(client,db,monkeypatch):
     assert not db.scalar(select(EmailOutbox.id).where(EmailOutbox.change_id==2))
     db.get(User,1).secondary_location='South'; db.commit()
     submit(client)
-    assert {r.recipient_id for r in db.scalars(select(EmailOutbox).where(EmailOutbox.change_id==3))}=={2,3}
+    assert {r.recipient_id for r in db.scalars(select(EmailOutbox).where(EmailOutbox.change_id==3))}==set()
 
 
 def test_notification_preferences_require_admin_and_valid_locations(client,db):
@@ -126,3 +126,20 @@ def test_notification_preferences_require_admin_and_valid_locations(client,db):
     csrf=token(client.get('/admin'))
     assert client.post('/admin/my-notifications',data={'csrf':csrf,'notification_locations':'South'}).status_code==422
     assert client.post('/admin/my-notifications',data={'notifications_enabled':'on'}).status_code==403
+
+
+def test_secondary_only_queued_mail_is_cancelled(client,db,monkeypatch):
+    enable(monkeypatch)
+    db.get(User,1).secondary_location='South'
+    db.get(User,3).notification_email='south@example.com'; db.commit()
+    submit(client)
+    # Simulate a notification queued under the previous two-location policy.
+    db.add(EmailOutbox(change_id=1,recipient_id=3,event='submitted',recipient='south@example.com',
+        subject='Earlier queued request',body='Review request',status='queued'))
+    db.commit()
+    factory=sessionmaker(bind=db.get_bind(),expire_on_commit=False)
+    sent=[]
+    process_batch(factory,lambda item:sent.append(item.recipient_id))
+    db.expire_all()
+    item=db.scalar(select(EmailOutbox).where(EmailOutbox.recipient_id==3))
+    assert item.status=='cancelled' and 3 not in sent
