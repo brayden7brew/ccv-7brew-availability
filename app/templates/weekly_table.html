@@ -1,0 +1,6 @@
+{% macro week_table(schedule, days) %}
+{% set totals = week_totals(schedule) %}<div class="week-totals"><strong>{{ totals.available }} available</strong><span>{{ totals.unavailable }} unavailable</span></div><p class="muted">Weekly total out of 168 hours, including nights.</p>
+<div class="weekly-summary" role="table" aria-label="Weekly available hours">
+{% for day in days %}{% set hours = schedule.days[loop.index0] %}<div class="weekly-summary-row" role="row"><strong role="cell">{{ day }}</strong><span role="cell">{% if hours.mode == 'all_day' %}All day{% elif hours.mode == 'none' %}No hours{% else %}{{ hours.start }} – {{ hours.end }}{% if hours.end == "00:00" %} (midnight){% endif %}{% endif %}</span></div>{% endfor %}
+</div>
+{% endmacro %}

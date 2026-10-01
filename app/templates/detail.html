@@ -1,0 +1,14 @@
+{% extends 'base.html' %}{% from 'weekly_table.html' import week_table %}{% block content %}
+<p class="eyebrow">REQUEST #{{ change.id }} · {{ change.location }}{% if change.secondary_location %} / {{ change.secondary_location }}{% endif %}</p><h1>{{ employee.name }}’s weekly availability</h1>
+<span class="badge status-{{ change.status }}">{{ status_labels.get(change.status, change.status|replace('_',' ')) }}</span><p>{{ change.employee_note or 'No employee note.' }}</p>
+{% include 'request_usage.html' %}
+{% if change.status in ['needs_reconciliation','applying'] %}<div class="banner">Approval is recorded, but delivery is unconfirmed or incomplete. The portal operator must reconcile this request before another approval.</div>{% endif %}
+{% if change.status == 'conflict' %}<div class="banner">Availability or another approval changed after submission. Review the latest schedule and submit a new request.</div>{% endif %}
+{% if change.action == 'weekly' %}
+<p><strong>Starts {{ change.proposed.effective_date }}</strong> · Repeats weekly until the next approved schedule starts.</p>
+<div class="split"><section class="card"><h2>Previously approved hours</h2>{% if change.before.schedule %}{{ week_table(change.before.schedule, days) }}{% else %}<p>No portal-approved weekly schedule for this start date.</p>{% endif %}</section><section class="card"><h2>Requested available hours</h2>{{ week_table(change.proposed, days) }}</section></div>
+{% else %}<section class="card"><h2>Earlier event-based request</h2><p>This request used the old form. Submit a new weekly request to change your availability.</p><pre>{{ change.proposed|tojson(indent=2) }}</pre></section>{% endif %}
+{% if user.role in ('manager','admin') and user.id != change.employee_id and change.status == 'pending' %}
+<form method="post" action="/requests/{{ change.id }}/decision" class="card"><input type="hidden" name="csrf" value="{{ csrf }}"><h2>Review this request</h2><p class="muted">Compare the hours above. Please include a reason if you cannot approve them.</p><label>Message to the employee<textarea name="note" maxlength="2000" rows="3"></textarea></label>{% if change.action == 'weekly' %}<button name="decision" value="approve">{{ 'Approve test request' if cfg.dry_run else 'Approve weekly hours' }}</button>{% endif %} <button class="danger" name="decision" value="reject">Reject</button></form>{% endif %}
+<h2>Request activity</h2>{% for entry in history %}<article class="card audit"><strong>{{ entry.event|replace('_',' ')|capitalize }}</strong><small>{{ entry.created }} UTC · Actor #{{ entry.actor_id or 'system' }}</small><details><summary>Technical details</summary><pre>{{ entry.details|tojson(indent=2) }}</pre></details></article>{% endfor %}
+{% endblock %}

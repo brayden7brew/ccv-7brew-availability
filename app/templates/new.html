@@ -1,0 +1,22 @@
+{% extends 'base.html' %}{% block content %}
+{% if days is not defined %}
+<section class="card"><h1>Restart the portal to load the weekly form.</h1><p>The server is still running the previous version. In its Terminal window, press Control-C, then run start-test-site.command again and refresh this page.</p><p>Your saved requests and logins will remain intact.</p></section>
+{% else %}
+<p class="eyebrow">YOUR REPEATING WORK WEEK</p><h1>When can you work?</h1>
+<p>Enter the hours you <strong>are available</strong> for each day. This Sunday–Saturday pattern repeats every week until a newer approved schedule starts.</p>
+{% include 'request_usage.html' %}
+<form method="post" action="/requests" class="card weekly-form">
+<input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="weekly">
+<div class="form-step"><span>1</span><h2>When should these hours start?</h2></div><label class="start-date">Start date<input type="date" name="effective_date" min="{{ earliest }}" required></label>
+<p class="muted">Your current approved hours continue until this date. Submitting a request does not change them; manager approval is required.</p>
+<div class="form-step"><span>2</span><h2>Set your available hours</h2></div><p class="muted">Choose hours, all day, or no hours for each day below.</p><div class="weekly-editor">
+{% for day in days %}{% set i = loop.index0 %}{% set hours = defaults[i] %}
+<fieldset class="day-row"><legend>{{ day }}</legend>
+<label>Availability<select name="day_{{ i }}_mode" aria-label="{{ day }} availability"><option value="hours" {% if hours.mode == 'hours' %}selected{% endif %}>Enter hours</option><option value="all_day" {% if hours.mode == 'all_day' %}selected{% endif %}>Available all day</option><option value="none" {% if hours.mode == 'none' %}selected{% endif %}>No hours this day</option></select></label>
+<label>From<input type="time" name="day_{{ i }}_start" value="{{ hours.start }}" aria-label="{{ day }} available from"></label>
+<label>To<input type="time" name="day_{{ i }}_end" value="{{ hours.end }}" aria-label="{{ day }} available to"></label>
+</fieldset>{% endfor %}</div>
+<p class="muted">From/To apply when “Enter hours” is selected. Times use {{ cfg.business_timezone }}. A To time of midnight means the end of that day. For overnight availability, enter each day's portion separately. “No hours” means you cannot work that day.</p>
+<div class="form-step"><span>3</span><h2>Send for approval</h2></div><label>Anything your manager should know? (optional)<textarea name="employee_note" maxlength="2000" rows="3"></textarea></label>
+<div class="form-actions"><button {% if usage.blocked %}disabled{% endif %}>{{ "Request limit reached" if usage.blocked else "Send to my manager" }}</button><a href="/availability">Cancel</a></div><p class="muted">Your hours change only after your manager approves.</p>
+</form>{% endif %}{% endblock %}

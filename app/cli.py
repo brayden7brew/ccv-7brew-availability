@@ -1,0 +1,87 @@
+"""Operator-only commands. Run from a trusted terminal; passwords never enter arguments."""
+import argparse
+import getpass
+from datetime import timedelta
+from sqlalchemy import select, delete
+from .db import SessionLocal
+from .models import User, Scope, LoginSession, LoginAttempt, Change, now
+from .security import hasher
+from .workflow import audit
+from .wiw import WIW
+
+def password():
+    value = getpass.getpass('New portal password (at least 8 characters): ')
+    if len(value) < 8 or value != getpass.getpass('Confirm password: '):
+        raise SystemExit('Passwords must match and be at least 8 characters.')
+    return hasher.hash(value)
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest='command', required=True)
+    create = commands.add_parser('create-user')
+    create.add_argument('--email', required=True)
+    create.add_argument('--name', required=True)
+    create.add_argument('--role', choices=['employee','manager','admin'], default='employee')
+    create.add_argument('--wiw-user-id', type=int, required=True)
+    create.add_argument('--location', required=True)
+    for command in ['reset-password', 'disable-user']:
+        sub = commands.add_parser(command)
+        sub.add_argument('--email', required=True)
+    scope = commands.add_parser('scope')
+    scope.add_argument('--email', required=True)
+    scope.add_argument('--location', required=True)
+    scope.add_argument('--remove', action='store_true')
+    commands.add_parser('cleanup')
+    commands.add_parser('unresolved')
+    reconcile = commands.add_parser('reconcile')
+    reconcile.add_argument('--id', type=int, required=True)
+    reconcile.add_argument('--manager-email', required=True)
+    reconcile.add_argument('--outcome', choices=['applied','not-applied'], required=True)
+    reconcile.add_argument('--note', required=True)
+    args = parser.parse_args()
+    with SessionLocal() as db:
+        if args.command == 'create-user':
+            from .locations import lock_admin_changes, check_admin_cap
+            lock_admin_changes(db)
+            if args.role == 'admin': check_admin_cap(db)
+            if args.wiw_user_id <= 0: raise SystemExit('WIW user ID must be positive.')
+            db.add(User(email=args.email.lower().strip(), name=args.name, role=args.role,
+                wiw_user_id=args.wiw_user_id, location=args.location, password_hash=password()))
+        elif args.command in ['reset-password','disable-user','scope']:
+            user = db.scalar(select(User).where(User.email == args.email.lower().strip()))
+            if not user: raise SystemExit('No such user.')
+            if args.command == 'reset-password': user.password_hash = password()
+            if args.command == 'disable-user': user.active = False
+            if args.command in ['reset-password','disable-user']:
+                db.execute(delete(LoginSession).where(LoginSession.user_id == user.id))
+            else:
+                if user.role not in ('manager','admin'): raise SystemExit('User must be a manager.')
+                existing = db.scalar(select(Scope).where(Scope.manager_id == user.id, Scope.location == args.location))
+                if args.remove and existing: db.delete(existing)
+                elif not args.remove and not existing: db.add(Scope(manager_id=user.id, location=args.location))
+        elif args.command == 'cleanup':
+            db.execute(delete(LoginSession).where(LoginSession.expires < now()))
+            db.execute(delete(LoginAttempt).where(LoginAttempt.created < now()-timedelta(days=1)))
+        elif args.command == 'unresolved':
+            for c in db.scalars(select(Change).where(Change.status.in_(['applying','needs_reconciliation']))):
+                print(f'#{c.id} employee={c.employee_id} status={c.status}')
+        elif args.command == 'reconcile':
+            change = db.scalar(select(Change).where(Change.id == args.id).with_for_update())
+            actor = db.scalar(select(User).where(User.email == args.manager_email.lower(), User.role.in_(['manager','admin']), User.active.is_(True)))
+            if not change or change.status not in ['applying','needs_reconciliation'] or not actor:
+                raise SystemExit('An unresolved request and active manager are required.')
+            if len(args.note.strip()) < 10: raise SystemExit('Include a useful reconciliation explanation.')
+            if change.action == 'weekly':
+                from .weekly_workflow import reconcile_weekly
+                try:
+                    reconcile_weekly(db, actor, change, args.outcome, args.note, WIW())
+                except ValueError as exc:
+                    raise SystemExit(str(exc))
+            else:
+                current = WIW().read(change.wiw_user_id, change.read_start, change.read_end)
+                change.status = 'reconciled_applied' if args.outcome == 'applied' else 'reconciled_not_applied'
+                audit(db, change, actor, change.status, {'note': args.note, 'observed_state': current})
+        db.commit()
+    print('Done.')
+
+if __name__ == '__main__': main()

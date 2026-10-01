@@ -1,0 +1,163 @@
+databases:
+  - name: availability-db
+    plan: basic-256mb
+    databaseName: availability
+    user: availability
+services:
+  - type: web
+    name: availability-portal
+    runtime: python
+    plan: 0.5c-512mb
+    buildCommand: pip install -r requirements.txt
+    preDeployCommand: alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: DATABASE_URL
+        fromDatabase:
+          name: availability-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ENVIRONMENT
+        value: production
+      - key: SECURE_COOKIES
+        value: 'true'
+      - key: DRY_RUN
+        value: 'true'
+      - key: WIW_MODE
+        value: live
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: WIW_TOKEN
+        sync: false
+      - key: WIW_CONTEXT_USER_ID
+        sync: false
+      - key: WIW_ACCOUNT_ID
+        sync: false
+      - key: BUSINESS_TIMEZONE
+        value: America/New_York
+      - key: WIW_DEVELOPER_KEY
+        sync: false
+      - key: WIW_AUTO_ENROLL
+        value: 'true'
+      - key: WIW_AUTO_ENROLL_LOCATION
+        value: '7 Brew- Test Site'
+      - key: EMAIL_ENABLED
+        value: 'false'
+      - key: EMAIL_PROVIDER
+        value: microsoft_graph
+      - key: EMAIL_FROM
+        value: alerts@rva7brew.com
+      - key: MICROSOFT_TENANT_ID
+        value: 69472dc2-c25d-4239-9e9a-4736fa0ff1d3
+      - key: MICROSOFT_CLIENT_ID
+        value: 298269c1-e359-42ba-aea2-01f0d711b9b6
+      - key: MICROSOFT_CLIENT_SECRET
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+  - type: worker
+    name: availability-email-worker
+    runtime: python
+    plan: 0.5c-512mb
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.mailer
+    envVars:
+      - key: PYTHON_VERSION
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: PYTHON_VERSION
+      - key: DATABASE_URL
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: DATABASE_URL
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: SECRET_KEY
+      - key: ENVIRONMENT
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: ENVIRONMENT
+      - key: SECURE_COOKIES
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: SECURE_COOKIES
+      - key: DRY_RUN
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: DRY_RUN
+      - key: WIW_MODE
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: WIW_MODE
+      - key: ALLOWED_HOSTS
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: ALLOWED_HOSTS
+      - key: WIW_TOKEN
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: WIW_TOKEN
+      - key: WIW_CONTEXT_USER_ID
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: WIW_CONTEXT_USER_ID
+      - key: WIW_ACCOUNT_ID
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: WIW_ACCOUNT_ID
+      - key: BUSINESS_TIMEZONE
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: BUSINESS_TIMEZONE
+      - key: EMAIL_ENABLED
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: EMAIL_ENABLED
+      - key: EMAIL_PROVIDER
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: EMAIL_PROVIDER
+      - key: EMAIL_FROM
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: EMAIL_FROM
+      - key: MICROSOFT_TENANT_ID
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: MICROSOFT_TENANT_ID
+      - key: MICROSOFT_CLIENT_ID
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: MICROSOFT_CLIENT_ID
+      - key: MICROSOFT_CLIENT_SECRET
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: MICROSOFT_CLIENT_SECRET
+      - key: PUBLIC_BASE_URL
+        fromService:
+          type: web
+          name: availability-portal
+          envVarKey: PUBLIC_BASE_URL

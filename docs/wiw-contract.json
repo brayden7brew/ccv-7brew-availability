@@ -1,0 +1,338 @@
+{
+  "source": "https://apidocs.wheniwork.com/external/monolith/docs-master.json",
+  "verified": "2026-09-29",
+  "sha256_of_full_source": "c83a58975483319956cfb5df4a2f2cb7cf0ddddebf07f4ff6559ada6cb5cdfe8",
+  "paths": {
+    "/2/availabilityevents": {
+      "get": {
+        "summary": "List Availability Events",
+        "description": "Get a list of availability events based on a set of filters. Requests date ranges will include events with recurrence patterns within the date range. Requests will be submitted with the supplied date range and the response will be in the requesting users timezone.",
+        "tags": [
+          "Availabilities"
+        ],
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "description": "The start of the filter range. Defaults to \"now\"",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "description": "The end of the filter range. Defaults to \"two weeks from now\"",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "description": "The optional User ID who's events you wish to fetch. If omitted, uses the calling user's ID",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "include_all",
+            "in": "query",
+            "description": "Whether to include all availability data instead of just the requestor's. Only valid for managers",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "availabilityevents": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AvailabilityEvent"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Availability Event",
+        "description": "Create an availability preference",
+        "tags": [
+          "Availabilities"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AvailabilityEventRequest"
+        },
+        "responses": {
+          "200": {
+            "description": "Valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "availabilityevent": {
+                      "$ref": "#/components/schemas/AvailabilityEvent"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/availabilityevents/{id}": {
+      "get": {
+        "summary": "Get Availability Event",
+        "description": "Get a single availability event by ID",
+        "tags": [
+          "Availabilities"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the event",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "availabilityevent": {
+                      "$ref": "#/components/schemas/AvailabilityEvent"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update Availability Event",
+        "description": "Update an existing availability preference",
+        "tags": [
+          "Availabilities"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the shift",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AvailabilityEventRequest"
+        },
+        "responses": {
+          "200": {
+            "description": "Valid. The new preference and (potentially) the edited original preference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "availabilityevents": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AvailabilityEvent"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Availability Event",
+        "description": "Delete an existing event when no longer needed. This operation cannot be undone.",
+        "tags": [
+          "Availabilities"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the event",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/availabilityevents/{id}/exceptions": {
+      "post": {
+        "summary": "Create Availability Event Exception",
+        "description": "Create a standalone availability preference in the middle of a recurring series",
+        "tags": [
+          "Availabilities"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AvailabilityEvent"
+              }
+            }
+          },
+          "description": "The new event. Uses the new event's start time to update the existing series."
+        },
+        "responses": {
+          "200": {
+            "description": "Valid. The new preference and the edited original preference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "availabilityevents": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AvailabilityEvent"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "AvailabilityEvent": {
+    "type": "object",
+    "required": [
+      "start_time",
+      "type"
+    ],
+    "properties": {
+      "id": {
+        "type": "integer",
+        "readOnly": true,
+        "example": 10000
+      },
+      "account_id": {
+        "type": "integer",
+        "example": 10000
+      },
+      "user_id": {
+        "type": "integer",
+        "example": 10000
+      },
+      "login_id": {
+        "type": "string",
+        "example": "10000"
+      },
+      "type": {
+        "type": "integer",
+        "example": 1,
+        "enum": [
+          1,
+          2
+        ],
+        "description": "Type code. 1 for \"unavailable\", 2 for \"preferred\""
+      },
+      "start_time": {
+        "type": "string",
+        "format": "date-time",
+        "example": "Thu, 06 Mar 2016 21:12:14 -0600",
+        "description": "Start time of the event. Must be no more than 24 hours in the past"
+      },
+      "end_time": {
+        "type": "string",
+        "format": "date-time",
+        "example": "Thu, 06 Mar 2016 21:12:14 -0600",
+        "description": "End time of the event. If \"all_day\" is sent and true, this field is optional"
+      },
+      "all_day": {
+        "type": "boolean",
+        "example": false
+      },
+      "notes": {
+        "type": "string",
+        "example": "No evenings in March",
+        "description": "Maximum of 160 characters"
+      },
+      "recurrence": {
+        "type": "string",
+        "example": "FREQ=YEARLY;INTERVAL=2;COUNT=5;BYMONTH=1,2,3",
+        "description": "Recurrence rule. See https://tools.ietf.org/html/rfc5545"
+      },
+      "recurrence_end": {
+        "type": "string",
+        "readOnly": true,
+        "format": "date-time",
+        "example": "Thu, 06 Mar 2016 21:12:14 -0600",
+        "description": "End date of the recurring series. Null for \"does not repeat\" or \"repeats infinitely\""
+      },
+      "created_at": {
+        "type": "string",
+        "format": "date-time",
+        "example": "Thu, 06 Mar 2016 21:12:14 -0600"
+      },
+      "updated_at": {
+        "type": "string",
+        "format": "date-time",
+        "example": "Thu, 06 Mar 2016 22:17:14 -0600"
+      }
+    }
+  },
+  "authentication": {
+    "W-Token": {
+      "type": "http",
+      "scheme": "bearer",
+      "bearerFormat": "JSON Web Token",
+      "description": "Authentication with When I Work is based on a token model using [JSON Web Tokens](https://jwt.io/). First, you authenticate using a private developer key and the username and password of a When I Work user. Your developer key can be used like the following in the headers.\n```\ncurl -X POST \\\n  https://api.login.wheniwork.com/login \\\n  -H 'W-Key: <INSERT_DEVELOPER_KEY_HERE>' \\\n  -H 'content-type: application/json' \\\n  -d '{\"email\":\"<INSERT_USERNAME_HERE>\",\"password\":\"<INSERT_PASSWORD_HERE>\"}'\n```\n\nAuthenticating returns back a person object containing a token that is used to authenticate all future requests. You can now use this token to fetch all the users tied to your person. The token may be included in the headers, as a cookie, or in the query string using the key \u2018W-Token\u2019 or \u2018Authorization\u2019. If the authenticated user belongs to more than one Workplace you will need to get the User listing to obtain the user-id value\n```\ncurl -X GET \\\n  'https://api.wheniwork.com/2/login?show_pending=true' \\\n  -H 'Host: api.wheniwork.com' \\\n  -H 'Authorization: Bearer <INSERT_TOKEN_HERE>'\n```\n\nThe response will also include a listing of the user objects related to the person for each associated When I Work account. You can use the user ID to set the context for which account you will be acting upon by providing a When I Work user ID through the \u2018W-UserID\u2019 header.\n```\ncurl -X GET \\\n  https://api.wheniwork.com/2/users \\\n  -H 'Authorization: Bearer <INSERT TOKEN HERE>' \\\n  -H 'W-UserId: <INSERT_USER_ID_HERE>'\n```\nWhen I Work protects our application and API with rate limiting thresholds. Rate limiting utilizes thresholds based on rolling windows of time. Typical responses will be 403 level client side errors when encountering these limits. If you suspect you are encountering one of our thresholds please connect with our Customer Care team at support@wheniwork.com.\n\nYou can find additional authentication related API documentation in our [Login Service API docs](https://apidocs.wheniwork.com/external/index.html?repo=login).\n"
+    }
+  }
+}
