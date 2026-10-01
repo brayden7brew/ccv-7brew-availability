@@ -51,6 +51,7 @@ def main():
     replace.add_argument('--id', type=int, required=True)
     replace.add_argument('--manager-email', required=True)
     replace.add_argument('--preserve-before', required=True)
+    replace.add_argument('--resolve-conflicts', action='store_true')
     resume = commands.add_parser('resume-verified-deletions')
     resume.add_argument('--id', type=int, required=True)
     resume.add_argument('--manager-email', required=True)
@@ -137,7 +138,7 @@ def main():
                 User.role.in_(['manager','admin']), User.active.is_(True)))
             if not actor: raise SystemExit('An active manager or administrator is required.')
             try:
-                change = recover_requested_schedule(db, actor, args.id, args.preserve_before, WIW())
+                change = recover_requested_schedule(db, actor, args.id, args.preserve_before, WIW(), resolve_conflicts=args.resolve_conflicts)
             except (ValueError, WIWError) as exc: raise SystemExit(str(exc))
             print(f'Request #{change.id}: {change.status}')
         elif args.command == 'resume-verified-deletions':

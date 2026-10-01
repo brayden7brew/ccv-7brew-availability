@@ -87,3 +87,14 @@ format illustrated by the saved API schema. Live acceptance is verified at run
 time; tests alone do not establish that WIW will interpret those dates correctly.
 All-day 23:59:59 endpoints are normalized only for complete local calendar days.
 Timed shifts, missing recurrence, and altered dates never pass verification.
+
+If this recovery stops specifically with HTTP 409 / WIW code 4090, the same
+command with `--resolve-conflicts` can continue once. It verifies every completed
+creation and requires the entire current state to equal the original snapshot
+plus those creations. Missing, changed, or extra records block all writes.
+Only saved deletions of entries starting on or after the cutoff may move ahead
+of the remaining creations; earlier entries and boundary-crossing updates are
+not eligible. Completed creations are kept, not repeated. This continuation
+performs live deletions before the remaining creates, so a later failure can
+leave a partial schedule. It journals the revised order and refuses a second
+continuation; only a verified complete final state is marked applied.
