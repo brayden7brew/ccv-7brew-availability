@@ -124,7 +124,11 @@ async def wiw_login_post(request: Request, db=Depends(get_db)):
 
 @app.get('/login')
 def login_page(request: Request):
-    return page(request, 'login.html')
+    return page(request, 'login.html', wiw_login=bool(cfg.wiw_developer_key))
+
+@app.get('/login/portal')
+def portal_login_page(request: Request):
+    return page(request, 'login.html', wiw_login=False)
 
 @app.post('/login')
 async def login_post(request: Request, db=Depends(get_db)):
