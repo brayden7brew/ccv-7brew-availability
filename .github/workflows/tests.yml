@@ -24,4 +24,4 @@ jobs:
       - run: alembic upgrade head
       - run: alembic check
       - run: alembic downgrade base
-      - run: pytest -q
+      - run: python -m pytest -q
