@@ -242,3 +242,10 @@ responses abort the import. Imports do not change employee assignments or grant
 manager permissions. Existing names are retained for historical requests and
 current permissions; schedule renames add a new choice and need administrator
 review of affected assignments. Availability remains workplace-wide in WIW.
+
+### Employee directory
+Admin lists 25 people per page with server-side name/email search and filters
+for primary or secondary location, portal role, and active/disabled status.
+Select a name to open that employee's access and password-setup card. Back links
+and saving access preserve directory filters. Import/email controls and the
+recent access log are grouped into collapsible sections beneath the directory.

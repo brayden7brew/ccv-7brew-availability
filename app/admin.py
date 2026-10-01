@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select, delete, func
+from sqlalchemy import select, delete, func, or_
 from .db import get_db
 from .models import User, Scope, Change, AdminAudit, Location, EmailOutbox, WebhookBatch
 from .security import current_user, csrf
@@ -16,19 +16,57 @@ def require_admin(request, db):
         raise HTTPException(403, 'Administrator access is required.')
     return user
 
+def directory_filters(request):
+    from urllib.parse import urlencode
+    values={k:request.query_params.get(k,'').strip()[:254] for k in ('q','location','role','status','p')}
+    return values, urlencode({k:v for k,v in values.items() if v})
+
 @router.get('/admin')
 def admin_page(request: Request, db=Depends(get_db)):
     from .main import page
+    from urllib.parse import urlencode
     actor = require_admin(request, db)
-    people = list(db.scalars(select(User).order_by(User.name)))
-    scopes = {u.id:list(db.scalars(select(Scope.location).where(Scope.manager_id == u.id).order_by(Scope.location))) for u in people}
-    history = list(db.scalars(select(AdminAudit).order_by(AdminAudit.id.desc()).limit(30)))
-    return page(request, 'admin.html', user=actor, people=people, scopes=scopes, history=history,
-                names={u.id:u.name for u in people}, locations=location_choices(db),
-                admin_count=sum(u.role=='admin' for u in people),
-                webhook_counts=dict(db.execute(select(WebhookBatch.status,func.count()).group_by(WebhookBatch.status)).all()),
-                latest_webhook=db.scalar(select(WebhookBatch.created).order_by(WebhookBatch.created.desc()).limit(1)),
-                mail_counts=dict(db.execute(select(EmailOutbox.status,func.count()).group_by(EmailOutbox.status)).all()))
+    filters, query = directory_filters(request)
+    conditions=[]
+    if filters['q']:
+        term=filters['q'].replace('\\','\\\\').replace('%','\\%').replace('_','\\_')
+        conditions.append(or_(*(col.ilike('%'+term+'%',escape='\\') for col in (User.name,User.email,User.notification_email))))
+    if filters['location']:
+        conditions.append(or_(User.location==filters['location'],User.secondary_location==filters['location']))
+    if filters['role'] in ('employee','manager','admin'): conditions.append(User.role==filters['role'])
+    if filters['status'] in ('active','disabled'): conditions.append(User.active.is_(filters['status']=='active'))
+    total=db.scalar(select(func.count()).select_from(User).where(*conditions))
+    pages=max(1,(total+24)//25)
+    try: number=max(1,min(int(filters['p'] or 1),pages))
+    except ValueError: number=1
+    filters['p']=str(number)
+    query=urlencode({k:v for k,v in filters.items() if v})
+    people=list(db.scalars(select(User).where(*conditions).order_by(func.lower(User.name),User.id).offset((number-1)*25).limit(25)))
+    def page_url(n): return '/admin?'+urlencode({**{k:v for k,v in filters.items() if v},'p':n})
+    history=list(db.scalars(select(AdminAudit).order_by(AdminAudit.id.desc()).limit(30)))
+    ids={v for h in history for v in (h.actor_id,h.target_id)}
+    names=dict(db.execute(select(User.id,User.name).where(User.id.in_(ids))).all()) if ids else {}
+    return page(request,'admin.html',user=actor,people=people,history=history,names=names,
+        locations=location_choices(db),filters=filters,directory_query=query,total=total,page_number=number,pages=pages,
+        previous_url=page_url(number-1),next_url=page_url(number+1),
+        admin_count=db.scalar(select(func.count()).select_from(User).where(User.role=='admin')),
+        webhook_counts=dict(db.execute(select(WebhookBatch.status,func.count()).group_by(WebhookBatch.status)).all()),
+        latest_webhook=db.scalar(select(WebhookBatch.created).order_by(WebhookBatch.created.desc()).limit(1)),
+        mail_counts=dict(db.execute(select(EmailOutbox.status,func.count()).group_by(EmailOutbox.status)).all()))
+
+@router.get('/admin/users/{user_id}')
+def person_page(request: Request,user_id:int,db=Depends(get_db)):
+    from .main import page
+    actor=require_admin(request,db)
+    person=db.get(User,user_id)
+    if not person: raise HTTPException(404,'Employee not found.')
+    _,query=directory_filters(request)
+    history=list(db.scalars(select(AdminAudit).where(AdminAudit.target_id==user_id).order_by(AdminAudit.id.desc()).limit(20)))
+    ids={h.actor_id for h in history}
+    names=dict(db.execute(select(User.id,User.name).where(User.id.in_(ids))).all()) if ids else {}
+    return page(request,'admin_person.html',user=actor,person=person,locations=location_choices(db),
+        scopes={person.id:list(db.scalars(select(Scope.location).where(Scope.manager_id==user_id)))},
+        directory_query=query,back_url='/admin'+('?' + query if query else ''),history=history,names=names)
 
 @router.post('/admin/users/{user_id}')
 async def update_user(request: Request, user_id: int, db=Depends(get_db)):
@@ -75,7 +113,7 @@ async def update_user(request: Request, user_id: int, db=Depends(get_db)):
     db.add(AdminAudit(actor_id=actor.id, target_id=target.id,
         details={'before':before,'after':dict(role=role,location=location,secondary_location=secondary,notification_email=notification_email,scopes=scopes)}))
     db.commit()
-    return RedirectResponse('/admin',303)
+    return RedirectResponse(f'/admin/users/{user_id}?'+directory_filters(request)[1]+'&saved=1',303)
 
 
 @router.post('/admin/locations')
