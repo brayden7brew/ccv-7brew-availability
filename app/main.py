@@ -34,6 +34,8 @@ from .weekly import week_totals
 templates.env.globals['week_totals'] = week_totals
 from .admin import router as admin_router
 app.include_router(admin_router)
+from .portal_setup import router as portal_setup_router
+app.include_router(portal_setup_router)
 
 @app.middleware('http')
 async def headers(request, call_next):

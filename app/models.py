@@ -112,3 +112,11 @@ class EmailOutbox(Base):
     created: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     next_attempt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     __table_args__ = (UniqueConstraint('change_id','recipient_id','event'),)
+
+class PortalSetup(Base):
+    __tablename__ = 'portal_setup'
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), primary_key=True)
+    digest: Mapped[str] = mapped_column(String(64), unique=True)
+    email: Mapped[str] = mapped_column(String(254))
+    expires: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    credential_version: Mapped[str] = mapped_column(String(64))

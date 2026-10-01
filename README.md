@@ -218,3 +218,17 @@ option. It persists the portal session cookie and sets a fixed 60-day server-sid
 expiry from sign-in. Without it, the configured `SESSION_HOURS` lifetime applies
 (default eight hours). No WIW password or token is stored in the cookie. Logout,
 operator password reset, and disabling an account revoke access as before.
+
+### Enable separate portal login for an imported employee
+In Admin, expand **Enable portal login / reset password** beneath the employee.
+Confirm their login email and choose **Create setup code**. Share the setup page
+and code directly with that employee. This version does not email setup codes.
+The employee enters the code at `/setup` and chooses a password (8+ characters).
+Codes expire after 24 hours, work once, and are replaced by a newly issued code.
+Only their hash is stored; they are never placed in URLs or the audit trail.
+The email/password changes only when the employee completes setup. Their WIW ID,
+role, locations, and notification email are preserved. Existing portal sessions
+are revoked on completion. Disabled accounts cannot redeem codes, and a credential
+change invalidates outstanding codes. This fallback does not inherit WIW MFA.
+Run the latest Alembic migration before using this feature; Render's predeploy
+command runs it automatically.
