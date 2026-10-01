@@ -210,3 +210,23 @@ def test_deleted_saved_event_never_returns_partial_state(monkeypatch):
         return httpx.Response(404,json={'error':'Not found'})
     with pytest.raises(WIWError):
         WIW(httpx.MockTransport(handle)).read(20,'2030-01-01','2030-02-01')
+
+
+@pytest.mark.parametrize('unchanged',[False,True])
+def test_weekly_update_verifies_saved_recurrence(monkeypatch,unchanged):
+    live(monkeypatch)
+    payload={'type':1,'start_time':'2030-01-01T05:00:00-05:00',
+             'end_time':'2030-01-01T10:00:00-05:00','recurrence':'FREQ=DAILY;COUNT=5'}
+    event={'id':77,'user_id':20,'account_id':10,**payload}
+    def handle(request):
+        assert request.url.path=='/2/availabilityevents/77'
+        if request.method=='PUT':
+            assert json.loads(request.content)=={**payload,'user_id':20,'account_id':10}
+            return httpx.Response(200,json={'availabilityevents':[event]})
+        return httpx.Response(200,json={'availabilityevent':{**event,'recurrence':'FREQ=DAILY'} if unchanged else event})
+    change=SimpleNamespace(action='weekly',status='applying',manager_id=2,dry_run=False,wiw_user_id=20)
+    provider=WIW(httpx.MockTransport(handle))
+    operation={'action':'update','event_id':77,'payload':payload}
+    if unchanged:
+        with pytest.raises(WIWError): provider.weekly_operation(change,operation)
+    else: assert provider.weekly_operation(change,operation)['availabilityevents']==[event]

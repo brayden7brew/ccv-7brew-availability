@@ -7,7 +7,7 @@ from .weekly import timeline, timeline_ids, display_schedule, event_plan, local_
 from .config import settings
 from .wiw import WIWError
 
-def approve_weekly(db, actor, change, note, provider):
+def approve_weekly(db, actor, change, note, provider, replace_existing=False):
     from .workflow import audit, canonical
     dry_run = settings().dry_run
     rows = timeline(db, change.employee_id, dry_run)
@@ -30,9 +30,15 @@ def approve_weekly(db, actor, change, note, provider):
         db.commit()
         return change
     known = {m.event_id for m in managed}
-    if any(e['id'] not in known for e in current['availabilityevents']):
-        raise HTTPException(409, 'Existing WIW preferences are not managed by this portal. A manager must review and remove conflicting preferences in WIW before a fresh weekly request can be approved.')
     effective = date.fromisoformat(change.proposed['effective_date'])
+    from .legacy_availability import handover
+    try:
+        legacy_operations, retained = handover(
+            [e for e in current['availabilityevents'] if e['id'] not in known], effective)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc))
+    if legacy_operations and not replace_existing:
+        raise HTTPException(409, 'Review the existing WIW availability and confirm replacement from the requested start date before approving.')
     if effective <= local_today():
         raise HTTPException(409, 'The start date has passed. Submit a request with a future start date.')
     profiles = {r.effective_date.isoformat():display_schedule(r) for r in rows}
@@ -41,12 +47,12 @@ def approve_weekly(db, actor, change, note, provider):
         payloads = event_plan(list(profiles.values()))
     except ValueError as exc:
         raise HTTPException(422, str(exc))
-    operations = ([{'action':'delete', 'event_id':m.event_id} for m in managed] +
+    operations = (legacy_operations + [{'action':'delete', 'event_id':m.event_id} for m in managed] +
                   [{'action':'create', 'payload':p} for p in payloads])
     change.manager_id, change.manager_note, change.dry_run = actor.id, note, dry_run
     change.status = 'approved_dry_run' if dry_run else 'applying'
     audit(db, change, actor, 'approved', {'note':note,'dry_run':dry_run,'pre_write_state':current,
-        'managed_event_snapshots':fresh, 'operations':operations, 'weekly_schedule':change.proposed})
+        'managed_event_snapshots':fresh, 'retained_external_events':retained, 'replace_existing':bool(legacy_operations), 'operations':operations, 'weekly_schedule':change.proposed})
     db.commit()
     if not dry_run:
         for index, operation in enumerate(operations):
@@ -61,9 +67,9 @@ def approve_weekly(db, actor, change, note, provider):
                 db.commit()
                 return change
             if operation['action'] == 'delete':
-                item = next(m for m in managed if m.event_id == operation['event_id'])
-                item.active = False
-            else:
+                item = next((m for m in managed if m.event_id == operation['event_id']), None)
+                if item: item.active = False
+            elif operation['action'] == 'create':
                 event = result['availabilityevent']
                 db.add(ManagedEvent(employee_id=change.employee_id, event_id=event['id'], snapshot=event))
             audit(db, change, actor, 'operation_succeeded', {'index':index, 'response':result})
@@ -95,7 +101,8 @@ def reconcile_weekly(db, actor, change, outcome, note, provider):
             raise ValueError('WIW does not exactly match the saved pre-write state. Restore or complete the intended schedule before reconciling.')
         snapshots = approval.details['managed_event_snapshots']
     else:
-        expected = [op['payload'] for op in approval.details['operations'] if op['action']=='create']
+        retained = approval.details.get('retained_external_events', [])
+        expected = retained + [op['payload'] for op in approval.details['operations'] if op['action']=='create']
         def fingerprint(event):
             rule = event.get('recurrence','') or ''
             return (event['type'], parse(event['start_time']).isoformat(), parse(event['end_time']).isoformat(),
@@ -103,7 +110,8 @@ def reconcile_weekly(db, actor, change, outcome, note, provider):
         from collections import Counter
         if Counter(map(fingerprint,current['availabilityevents'])) != Counter(map(fingerprint,expected)):
             raise ValueError('WIW does not match the complete approved weekly plan. Leave this request unresolved until every planned event is verified.')
-        snapshots = current['availabilityevents']
+        retained_ids = {event['id'] for event in retained}
+        snapshots = [event for event in current['availabilityevents'] if event['id'] not in retained_ids]
         if not db.scalar(select(WeeklySchedule.id).where(WeeklySchedule.change_id==change.id)):
             db.add(WeeklySchedule(change_id=change.id, employee_id=change.employee_id,
                 effective_date=date.fromisoformat(change.proposed['effective_date']),

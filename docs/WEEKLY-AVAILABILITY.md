@@ -30,3 +30,25 @@ On 2026-09-29 the test-site diagnostic confirmed WIW rejects ranges over 95 days
 
 
 WIW live validation (2026-09-29): HTTP 400 / code 2006, “Choose a day to repeat on,” rejects FREQ=WEEKLY without an explicit weekday. The planner now supplies BYDAY=SU through BYDAY=SA, matching each event’s local start date. BYDAY uses RFC 5545 section 3.3.10 (https://www.rfc-editor.org/rfc/rfc5545). Live acceptance of the corrected payload remains to be verified. Regression suite: 77 passed, 1 skipped (Postgres-only).
+
+### Reviewing existing WIW availability
+
+Managers can explicitly confirm a dated handover of external WIW preferences on
+an employee's request page. The saved submission snapshot is compared with WIW
+again before any operation. External events ending before the effective date are
+left alone; future-only events are deleted; recurring series crossing the date
+are capped with COUNT using their original DTSTART. One-off events crossing the
+boundary are shortened. Unsupported recurrence or overnight recurring boundary
+cases are blocked for manual review, without writes.
+
+The approval journal includes the full original state, exact operations, and
+expected retained external entries. Updates use the documented event PUT and
+are read back to verify all submitted fields. Any failure or unexpected split
+stops processing and requires reconciliation; it is never retried automatically.
+Retained external events are not registered as portal-managed, so later weekly
+rebuilds cannot delete their earlier history. Reconciliation includes these
+retained events in the expected final state.
+
+Live WIW acceptance of an update with a historical DTSTART still needs a test
+against the test workplace. If WIW rejects it under its documented start-time
+restriction, the portal stops instead of deleting/recreating historical entries.

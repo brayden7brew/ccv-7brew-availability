@@ -18,7 +18,7 @@ from .config import settings
 from .request_limits import request_usage
 from .availability_rules import employee_rules, validate_employee_rules
 from .db import get_db
-from .models import User, Scope, Change, Audit, LoginSession, LoginAttempt, now
+from .models import ManagedEvent, User, Scope, Change, Audit, LoginSession, LoginAttempt, now
 from .security import current_user, csrf, digest, login, verify, DUMMY
 from .weekly import WeeklyInput, DAYS, timeline, timeline_ids, display_schedule, local_today
 from .wiw import WIW, WIWError
@@ -298,12 +298,15 @@ def detail(request: Request, change_id: int, db=Depends(get_db)):
     history = db.scalars(select(Audit).where(Audit.change_id == change.id).order_by(Audit.id)).all()
     actor_ids = {entry.actor_id for entry in history if entry.actor_id}
     actor_names = dict(db.execute(select(User.id, User.name).where(User.id.in_(actor_ids))).all())
-    return page(request, 'detail.html', user=user, change=change, employee=employee, history=history, actor_names=actor_names, days=DAYS, usage=request_usage(db, employee.id))
+    managed_ids = set(db.scalars(select(ManagedEvent.event_id).where(
+        ManagedEvent.employee_id == change.employee_id, ManagedEvent.active.is_(True))).all())
+    existing_events = [e for e in change.before.get('availabilityevents', []) if e['id'] not in managed_ids]
+    return page(request, 'detail.html', user=user, change=change, employee=employee, history=history, existing_events=existing_events, actor_names=actor_names, days=DAYS, usage=request_usage(db, employee.id))
 
 @app.post('/requests/{change_id}/decision')
 async def decision(request: Request, change_id: int, db=Depends(get_db)):
     user = current_user(request, db)
     form = await request.form(max_fields=10)
     csrf(request, form.get('csrf'))
-    await run_in_threadpool(decide, db, user, change_id, form.get('decision'), str(form.get('note','')).strip())
+    await run_in_threadpool(decide, db, user, change_id, form.get('decision'), str(form.get('note','')).strip(), replace_existing=form.get('replace_existing') == 'yes')
     return RedirectResponse(f'/requests/{change_id}', 303)

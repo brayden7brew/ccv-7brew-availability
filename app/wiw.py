@@ -134,6 +134,30 @@ class WIW:
             result = self.call('DELETE', f"/2/availabilityevents/{operation['event_id']}")
             if result.get('success') is not True:
                 raise WIWError('WIW deletion could not be verified.')
+        elif operation['action'] == 'update':
+            result = self.call('PUT', f"/2/availabilityevents/{operation['event_id']}", payload={
+                **operation['payload'], 'user_id':change.wiw_user_id, 'account_id':self.cfg.wiw_account_id})
+            events = result.get('availabilityevents')
+            if (not isinstance(events, list) or len(events) != 1
+                    or not isinstance(events[0], dict) or events[0].get('id') != operation['event_id']
+                    or events[0].get('user_id') != change.wiw_user_id
+                    or events[0].get('account_id') != self.cfg.wiw_account_id):
+                raise WIWError('WIW did not confirm the expected availability update.')
+            # A successful HTTP status alone does not prove that WIW capped the rule.
+            observed = self.get(operation['event_id'], change.wiw_user_id)
+            for key, value in operation['payload'].items():
+                actual = observed.get(key)
+                if key in ('start_time', 'end_time'):
+                    try:
+                        matches = parse(actual) == parse(value)
+                    except (ValueError, TypeError):
+                        matches = False
+                elif key == 'recurrence':
+                    matches = sorted((actual or '').removeprefix('RRULE:').upper().split(';')) == sorted(value.upper().split(';'))
+                else:
+                    matches = actual == value
+                if not matches:
+                    raise WIWError('WIW availability update could not be verified.')
         elif operation['action'] == 'create':
             result = self.call('POST', '/2/availabilityevents', payload={
                 **operation['payload'], 'user_id':change.wiw_user_id, 'account_id':self.cfg.wiw_account_id})

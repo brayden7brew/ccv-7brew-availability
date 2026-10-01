@@ -20,7 +20,7 @@ def allowed(db, user, change):
 def canonical(state):
     return json.dumps(sorted(state['availabilityevents'], key=lambda x: x['id']), sort_keys=True)
 
-def decide(db, actor, change_id, decision, note, provider=None):
+def decide(db, actor, change_id, decision, note, provider=None, replace_existing=False):
     provider = provider or WIW()
     # Employee row serializes decisions across all of this employee's requests in Postgres.
     existing = db.get(Change, change_id)
@@ -48,4 +48,4 @@ def decide(db, actor, change_id, decision, note, provider=None):
     if unresolved:
         raise HTTPException(409, 'An earlier write needs reconciliation before another approval.')
     from .weekly_workflow import approve_weekly
-    return approve_weekly(db, actor, change, note, provider)
+    return approve_weekly(db, actor, change, note, provider, replace_existing=replace_existing)

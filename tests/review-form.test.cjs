@@ -6,9 +6,10 @@ const {runInNewContext} = require('node:vm');
 test('rejection requires a nonblank reason while approval remains optional', () => {
   const handlers = {}, noteHandlers = {}, windowHandlers = {};
   const note = {value:'', addEventListener(name, fn) {noteHandlers[name]=fn;}, focus() {}};
-  const reject = {}, help = {};
+  const reject = {}, help = {}, approve = {};
+  const confirmation = {checked:false,addEventListener(name,fn) {noteHandlers.confirm=fn;}};
   const form = {addEventListener(name, fn) {handlers[name]=fn;}};
-  const ids = {'review-form':form,'review-note':note,'reject-button':reject,'reject-help':help};
+  const ids = {'review-form':form,'review-note':note,'reject-button':reject,'reject-help':help,'approve-button':approve,'replace-existing':confirmation};
   runInNewContext(readFileSync('app/static/review-form.js','utf8'), {
     document:{getElementById(id) {return ids[id];}},
     window:{addEventListener(name, fn) {windowHandlers[name]=fn;}}
@@ -18,6 +19,10 @@ test('rejection requires a nonblank reason while approval remains optional', () 
     handlers.submit({submitter,preventDefault(){prevented=true;}});
     return prevented;
   };
+  assert.equal(approve.disabled,true);
+  assert.equal(submit(approve),true);
+  confirmation.checked=true; noteHandlers.confirm();
+  assert.equal(approve.disabled,false); assert.equal(submit(approve),false);
   assert.equal(reject.disabled,true);
   assert.equal(submit(reject),true);
   assert.equal(submit({value:'approve'}),false);
