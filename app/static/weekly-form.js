@@ -57,6 +57,7 @@
     if (note.value.length > 2000) errors.push('Keep your note to 2,000 characters or fewer.');
     if (blocked) errors.push('Your 30-day request limit has been reached. See the date above for your next request.');
     feedback.textContent = errors.length ? errors.join(' ') : 'Your request is ready to send.';
+    form.dataset.validationState = errors.length ? 'invalid' : 'valid';
     button.disabled = sending || errors.length > 0;
     return errors.length === 0;
   }

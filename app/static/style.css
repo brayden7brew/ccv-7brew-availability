@@ -17,3 +17,5 @@ button:disabled{opacity:.5;cursor:not-allowed}
 /* Keep names, controls, and long notes readable on narrow screens. */
 .heading>div,.day-row label{min-width:0}.day-row select{min-width:0;max-width:100%}h1,h2,h3,.person-locations,.banner{overflow-wrap:anywhere}.preserve-lines{white-space:pre-wrap;overflow-wrap:anywhere}summary{min-height:44px;padding:8px 0}summary:focus-visible{outline:3px solid #dbac49;outline-offset:3px}.nav-link{display:inline-flex;align-items:center;min-height:44px}
 .validation-feedback{border:1px solid #dbc0c6;border-radius:10px;background:#f8eef0;padding:14px 18px;margin-top:18px}.validation-feedback p:last-child{margin-bottom:0}#weekly-credit{font-weight:700}.day-error{grid-column:1/-1;margin:0;font-size:.85rem}[hidden]{display:none!important}select:disabled{background:#f0f3f1;color:#64766c;cursor:not-allowed}
+
+.weekly-form[data-validation-state="valid"] .validation-feedback{background:#e1f3e8;border-color:#9dcbb0;color:#216245}
