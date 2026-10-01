@@ -118,10 +118,12 @@ async def wiw_login_post(request: Request, db=Depends(get_db)):
     user = db.scalar(select(User).where(User.wiw_user_id == wiw_user_id))
     if user is None and cfg.wiw_auto_enroll:
         # Identity is matched only by verified workplace user ID, never email.
-        # A random, unusable local password prevents creating a password fallback.
+        # A missing schedule stays unassigned until roster import/admin review;
+        # never route approvals to the workplace name.
+        # An unusable local password prevents creating a password fallback.
         user = User(wiw_user_id=wiw_user_id, email=f'wiw-{cfg.wiw_account_id}-{wiw_user_id}@portal.invalid',
             name=getattr(authenticator, 'display_name', '') or f'Employee {wiw_user_id}',
-            password_hash='!', role='employee', active=True, location=cfg.wiw_auto_enroll_location)
+            password_hash='!', role='employee', active=True, location='')
         db.add(user)
         try:
             db.commit()

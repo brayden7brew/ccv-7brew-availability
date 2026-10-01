@@ -80,3 +80,15 @@ def test_live_events_envelope_queues_subject_not_actor(client,db,monkeypatch):
         assert client.post('/webhooks/wiw',content=body,headers=headers).status_code==200
     assert db.scalar(select(func.count()).select_from(WebhookBatch))==1
     assert db.scalar(select(WebhookBatch)).user_ids==[45]
+
+
+def test_webhook_puts_above_stand_second(db):
+    from app.webhooks import sync_employee
+    person=db.get(User,1)
+    person.location='Above Stand'
+    class API:
+        def call(self,*args):
+            return {'user':dict(id=1,account_id=settings().wiw_account_id,activated=True,
+                is_deleted=False,first_name='Employee',locations=[6,5])}
+    sync_employee(db,db.get(User,2),API(),1,{6:'Above Stand',5:'LeGordon'})
+    assert (person.location,person.secondary_location)==('LeGordon','Above Stand')

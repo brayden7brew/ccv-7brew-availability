@@ -15,6 +15,8 @@ def record(uid=44, **overrides):
 class Roster:
     def __init__(self, rows): self.rows=rows
     def call(self, method, path, **kw):
+        if path=='/2/locations':
+            return {'locations':[dict(id=5,account_id=settings().wiw_account_id,name='LeGordon',is_deleted=False),dict(id=6,account_id=settings().wiw_account_id,name='Above Stand',is_deleted=False)]}
         assert (method,path)==('GET','/2/users')
         assert kw['params']=={'show_pending':'false','show_deleted':'false'}
         return {'users':self.rows}
@@ -32,7 +34,7 @@ def test_import_preserves_existing_and_is_repeatable(db,monkeypatch):
     assert person.notification_email=='test@example.com'
     assert db.get(User,1).active is False
     assert db.get(User,2).role=='manager'
-    assert db.scalar(select(func.count()).select_from(AdminAudit))==1
+    assert db.scalar(select(func.count()).select_from(AdminAudit).where(AdminAudit.details['event'].as_string()=='wiw_employee_imported'))==1
 
 
 def test_wrong_account_fails_before_any_insert(db,monkeypatch):
@@ -53,3 +55,37 @@ def test_import_route_admin_csrf_and_success(client,db,monkeypatch):
     response=client.post('/admin/import-wiw',data={'csrf':token})
     assert response.status_code==200
     assert '1 new employees added' in response.text
+
+
+def test_import_corrects_placeholder_and_orders_above_stand(db,monkeypatch):
+    monkeypatch.setattr(settings(),'wiw_mode','live')
+    person=db.get(User,1)
+    person.location='7 Brew'
+    person.role='manager'
+    rows=[record(1,locations=[6,5]),record(44,locations=[6])]
+    import_roster(db,db.get(User,2),Roster(rows))
+    db.flush()
+    assert (person.location,person.secondary_location)==('LeGordon','Above Stand')
+    assert person.role=='manager'
+    solo=db.scalar(select(User).where(User.wiw_user_id==44))
+    assert (solo.location,solo.secondary_location)==('Above Stand','')
+    import_roster(db,db.get(User,2),Roster(rows))
+    assert (person.location,person.secondary_location)==('LeGordon','Above Stand')
+
+
+def test_assignment_ambiguity_and_pending_request(db,monkeypatch):
+    from app.roster import assigned_schedule_pair
+    from app.models import Change
+    schedules={5:'LeGordon',6:'Above Stand',7:'Ashland'}
+    assert assigned_schedule_pair({'locations':[6,5]},schedules,'Above Stand')==('LeGordon','Above Stand')
+    assert assigned_schedule_pair({'locations':[5,7,6]},schedules) is None
+    assert assigned_schedule_pair({'locations':[5,999]},schedules) is None
+    assert assigned_schedule_pair({'locations':[5,7]},schedules) is None
+    monkeypatch.setattr(settings(),'wiw_mode','live')
+    person=db.get(User,1)
+    before=person.location
+    db.add(Change(employee_id=person.id,wiw_user_id=person.wiw_user_id,location=before,
+        action='weekly',proposed={},before={},read_start='2026-10-01',read_end='2026-11-01',status='pending'))
+    db.flush()
+    import_roster(db,db.get(User,2),Roster([record(1,locations=[6,5])]))
+    assert person.location==before

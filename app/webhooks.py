@@ -14,7 +14,7 @@ from .models import WebhookBatch, User, Change, LoginSession, PortalSetup, Admin
 from .wiw import WIW, WIWError
 from .locations import lock_admin_changes
 from .notifications import valid_email
-from .roster import import_schedules
+from .roster import import_schedules, assigned_schedule_pair
 
 router=APIRouter()
 logger=logging.getLogger(__name__)
@@ -86,9 +86,8 @@ def sync_employee(db,actor,api,uid,schedules):
     name=' '.join(str(record.get(k) or '').strip() for k in ('first_name','last_name')).strip()[:120] or f'Employee {uid}'
     address=record.get('email','')
     address=address.strip().lower() if isinstance(address,str) else ''
-    ids=record.get('locations',[])
-    choices=sorted(set(schedules[v] for v in ids if type(v) is int and v in schedules)) if isinstance(ids,list) else []
-    routing_valid=isinstance(ids,list) and all(type(v) is int and v in schedules for v in ids) and 1<=len(choices)<=2
+    pair=assigned_schedule_pair(record,schedules,person.location if person else '')
+    routing_valid=pair is not None
     created=person is None
     if created:
         person=User(wiw_user_id=uid,email=f'wiw-{cfg.wiw_account_id}-{uid}@portal.invalid',
@@ -105,8 +104,7 @@ def sync_employee(db,actor,api,uid,schedules):
     pending=db.scalar(select(Change.id).where(Change.employee_id==person.id,Change.status.in_(['pending','applying','needs_reconciliation'])))
     routing_review=not routing_valid or bool(pending)
     if routing_valid and not pending:
-        person.location=choices[0]
-        person.secondary_location=choices[1] if len(choices)>1 else ''
+        person.location,person.secondary_location=pair
     db.add(AdminAudit(actor_id=actor.id,target_id=person.id,details={'event':'wiw_webhook_employee_sync',
         'created':created,'before':before,'after':{'name':person.name,'active':person.active,'location':person.location,'secondary_location':person.secondary_location},
         'location_review_required':routing_review}))

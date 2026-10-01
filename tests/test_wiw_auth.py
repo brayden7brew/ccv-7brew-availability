@@ -116,7 +116,7 @@ def test_automatic_employee_enrollment_and_disabled_account(client, db, monkeypa
     response = client.post('/login/wiw', data={'csrf':csrf, 'email':'manager@test.local', 'password':'private'})
     assert response.status_code == 200
     user = db.scalar(select(User).where(User.wiw_user_id == 999))
-    assert user.role == 'employee' and user.location == 'Test location'
+    assert user.role == 'employee' and user.location == ''
     assert user.password_hash == '!' and user.email != 'manager@test.local'
     assert db.get(User,2).role == 'manager'
     csrf = token(response)
