@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select, func, or_, text
 from starlette.concurrency import run_in_threadpool
-from starlette.middleware.sessions import SessionMiddleware
+from .sessions import DeviceSessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .config import settings
 from .request_limits import request_usage
@@ -24,8 +24,8 @@ from .workflow import allowed, audit, decide
 
 cfg = settings()
 app = FastAPI(title='CCV 7 Brew Availability', docs_url=None, redoc_url=None, openapi_url=None)
-app.add_middleware(SessionMiddleware, secret_key=cfg.secret_key, session_cookie='portal_session',
-    max_age=cfg.session_hours * 3600, same_site='lax', https_only=cfg.secure_cookies)
+app.add_middleware(DeviceSessionMiddleware, secret_key=cfg.secret_key, session_cookie='portal_session',
+    normal_max_age=cfg.session_hours * 3600, same_site='lax', https_only=cfg.secure_cookies)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=cfg.allowed_hosts.split(','))
 root = Path(__file__).parent
 app.mount('/static', StaticFiles(directory=root/'static'), name='static')
@@ -85,6 +85,7 @@ def wiw_login_page(request: Request):
 async def wiw_login_post(request: Request, db=Depends(get_db)):
     form = await request.form(max_fields=10)
     csrf(request, form.get('csrf'))
+    remember = form.get('remember') == 'on'
     email = str(form.get('email','')).strip().lower()
     password = str(form.get('password',''))
     if not email or not password or len(email)>254 or len(password)>1024:
@@ -119,7 +120,7 @@ async def wiw_login_post(request: Request, db=Depends(get_db)):
     if not user.notification_email and valid_email(email):
         user.notification_email = email
         db.commit()
-    login(request, db, user)
+    login(request, db, user, remember=remember)
     return RedirectResponse('/',303)
 
 @app.get('/login')
@@ -134,6 +135,7 @@ def portal_login_page(request: Request):
 async def login_post(request: Request, db=Depends(get_db)):
     form = await request.form(max_fields=10)
     csrf(request, form.get('csrf'))
+    remember = form.get('remember') == 'on'
     email, password = str(form.get('email', '')).strip().lower(), str(form.get('password', ''))
     if len(email) > 254 or len(password) > 1024:
         raise HTTPException(422, 'Invalid login input.')
@@ -142,7 +144,7 @@ async def login_post(request: Request, db=Depends(get_db)):
     valid = verify(password, user.password_hash if user else DUMMY)
     if not user or not user.active or not valid:
         return page(request, 'login.html', error='Email or password is incorrect.')
-    login(request, db, user)
+    login(request, db, user, remember=remember)
     return RedirectResponse('/', 303)
 
 @app.post('/logout')

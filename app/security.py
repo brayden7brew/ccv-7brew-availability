@@ -30,16 +30,16 @@ def current_user(request, db):
         raise HTTPException(401, 'Account disabled.')
     return user
 
-def login(request, db, user):
+def login(request, db, user, *, remember=False):
     old = request.session.get('sid')
     if old:
         item = db.get(LoginSession, digest(old))
         if item: db.delete(item)
     request.session.clear()
     token = secrets.token_urlsafe(32)
-    request.session.update(sid=token, csrf=secrets.token_urlsafe(32))
+    request.session.update(sid=token, csrf=secrets.token_urlsafe(32), remember_device=remember)
     db.add(LoginSession(digest=digest(token), user_id=user.id,
-                        expires=now() + timedelta(hours=settings().session_hours)))
+                        expires=now() + (timedelta(days=60) if remember else timedelta(hours=settings().session_hours))))
     db.commit()
 
 def csrf(request, value):

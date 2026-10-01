@@ -211,3 +211,10 @@ addresses are preserved. Each new account is recorded in the access audit.
 Repeated imports do not duplicate users. No WIW writes or notification emails
 are triggered. Imported users sign in through WIW; no local password is created.
 This is an add-only import, not ongoing offboarding synchronization.
+
+### Remember this device
+Both sign-in forms offer an unchecked “Remember me on this device for 60 days”
+option. It persists the portal session cookie and sets a fixed 60-day server-side
+expiry from sign-in. Without it, the configured `SESSION_HOURS` lifetime applies
+(default eight hours). No WIW password or token is stored in the cookie. Logout,
+operator password reset, and disabling an account revoke access as before.
