@@ -15,6 +15,10 @@ function page(minimum = 900, blocked = false) {
   const credit = element(), feedback = element(), events = {}, windowEvents = {};
   const rows = Array.from({length:7}, (_,i) => {
     const fields = {mode:element('none'),start:element(),end:element(),error:element()};
+    fields.end.options = [element(), ...Array.from({length:73}, (_,n) => {
+      const minutes=300+n*15;
+      return element(`${String(Math.floor(minutes/60)).padStart(2,'0')}:${String(minutes%60).padStart(2,'0')}`);
+    })];
     return {fields, dataset:{day:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][i]},
       querySelector(selector) { return fields[selector === '.day-error' ? 'error' : selector.match(/_(mode|start|end)/)[1]]; }};
   });
@@ -53,7 +57,7 @@ test('time errors remain inline and minimum-off does not disable time validation
   p.hours(0,'05:00',''); assert.equal(p.button.disabled,true);
   assert.match(p.rows[0].fields.error.textContent,/both/);
   assert.equal(p.rows[0].fields.start.required,true);
-  p.hours(0,'10:00','05:00'); assert.match(p.rows[0].fields.error.textContent,/later/);
+  p.hours(0,'10:00','05:00'); assert.equal(p.rows[0].fields.end.value,''); assert.equal(p.button.disabled,true);
   p.hours(0,'05:01','10:00'); assert.equal(p.button.disabled,true);
   p.hours(0,'04:45','10:00'); assert.equal(p.button.disabled,true);
   p.hours(0,'05:00','10:00'); assert.equal(p.button.disabled,false);
@@ -67,4 +71,25 @@ test('notice dates, new-hire dates, notes and request limits control submission'
   p.note.value='x'.repeat(2001); p.input(); assert.equal(p.button.disabled,true);
   const blocked=page(0,true); blocked.date.value=blocked.date.min; blocked.change();
   assert.equal(blocked.button.disabled,true); assert.equal(blocked.submit(),true);
+});
+
+
+test('To choices must follow From and reset when From catches up', () => {
+  const p=page(0); p.date.value=p.date.min;
+  const row=p.rows[0].fields;
+  row.mode.value='hours'; p.change();
+  assert.equal(row.end.disabled,true);
+  p.hours(0,'10:00','11:00');
+  assert.equal(row.end.disabled,false);
+  assert.equal(row.end.options.find(o=>o.value==='10:00').disabled,true);
+  assert.equal(row.end.options.find(o=>o.value==='09:45').disabled,true);
+  assert.equal(row.end.options.find(o=>o.value==='10:15').disabled,false);
+  row.start.value='11:00'; p.change();
+  assert.equal(row.end.value,''); assert.equal(p.button.disabled,true);
+  row.start.value='05:00'; p.change();
+  assert.equal(row.end.options.find(o=>o.value==='10:00').disabled,false);
+  p.hours(0,'22:45','23:00'); assert.equal(p.button.disabled,false);
+  row.start.value='23:00'; p.change();
+  assert.equal(row.end.value,'');
+  assert.equal(row.end.options.filter(o=>o.value && !o.disabled).length,0);
 });

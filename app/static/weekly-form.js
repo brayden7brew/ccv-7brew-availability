@@ -33,7 +33,13 @@
       const start = row.querySelector('[name$="_start"]');
       const end = row.querySelector('[name$="_end"]');
       const message = row.querySelector('.day-error');
-      start.disabled = end.disabled = mode !== 'hours';
+      const fromMinute = minute(start.value);
+      start.disabled = mode !== 'hours';
+      end.disabled = mode !== 'hours' || fromMinute === null;
+      for (const option of end.options) {
+        option.disabled = option.value !== '' && (fromMinute === null || minute(option.value) <= fromMinute);
+      }
+      if (fromMinute !== null && end.value && minute(end.value) <= fromMinute) end.value = '';
       start.required = end.required = mode === 'hours';
       let error = '';
       if (mode === 'all_day') counted += 600;
