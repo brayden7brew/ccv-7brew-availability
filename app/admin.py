@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select, delete, func
 from .db import get_db
-from .models import User, Scope, Change, AdminAudit, Location, EmailOutbox
+from .models import User, Scope, Change, AdminAudit, Location, EmailOutbox, WebhookBatch
 from .security import current_user, csrf
 
 from .locations import location_choices, lock_admin_changes, check_admin_cap
@@ -26,6 +26,8 @@ def admin_page(request: Request, db=Depends(get_db)):
     return page(request, 'admin.html', user=actor, people=people, scopes=scopes, history=history,
                 names={u.id:u.name for u in people}, locations=location_choices(db),
                 admin_count=sum(u.role=='admin' for u in people),
+                webhook_counts=dict(db.execute(select(WebhookBatch.status,func.count()).group_by(WebhookBatch.status)).all()),
+                latest_webhook=db.scalar(select(WebhookBatch.created).order_by(WebhookBatch.created.desc()).limit(1)),
                 mail_counts=dict(db.execute(select(EmailOutbox.status,func.count()).group_by(EmailOutbox.status)).all()))
 
 @router.post('/admin/users/{user_id}')

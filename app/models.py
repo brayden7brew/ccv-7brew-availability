@@ -120,3 +120,14 @@ class PortalSetup(Base):
     email: Mapped[str] = mapped_column(String(254))
     expires: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     credential_version: Mapped[str] = mapped_column(String(64))
+
+class WebhookBatch(Base):
+    __tablename__ = 'webhook_batches'
+    digest: Mapped[str] = mapped_column(String(64), primary_key=True)
+    account_id: Mapped[int] = mapped_column(Integer)
+    user_ids: Mapped[list] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(20), default='queued')
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    created: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    next_attempt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    last_error: Mapped[str] = mapped_column(String(120), default='')

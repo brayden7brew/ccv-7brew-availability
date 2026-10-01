@@ -79,6 +79,8 @@ def main():
         print('Email sending is disabled; worker will remain idle until configured and restarted.', flush=True)
         if args.once: return
     while True:
+        from .webhooks import process_webhooks
+        process_webhooks()
         process_batch()
         if args.once: break
         time.sleep(30)

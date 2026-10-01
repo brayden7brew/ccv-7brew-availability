@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     dry_run: bool = True
     wiw_mode: str = 'demo'
     wiw_token: str = ''
+    wiw_webhook_secret: str = ''
     wiw_developer_key: str = ''
     wiw_auto_enroll: bool = False
     wiw_auto_enroll_location: str = ''

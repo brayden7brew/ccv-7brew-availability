@@ -36,6 +36,8 @@ from .admin import router as admin_router
 app.include_router(admin_router)
 from .portal_setup import router as portal_setup_router
 app.include_router(portal_setup_router)
+from .webhooks import router as webhook_router
+app.include_router(webhook_router)
 
 @app.middleware('http')
 async def headers(request, call_next):
