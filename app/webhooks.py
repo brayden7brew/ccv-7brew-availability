@@ -49,8 +49,9 @@ async def receive(request: Request,db=Depends(get_db)):
     try:
         payload=json.loads(raw)
         reason='batch_shape'
-        events=payload if isinstance(payload,list) else [payload]
-        if not events or len(events)>1000: raise ValueError()
+        # Live WIW deliveries use an events envelope; callback examples show single events.
+        events=payload['events'] if isinstance(payload,dict) and 'events' in payload else (payload if isinstance(payload,list) else [payload])
+        if not isinstance(events,list) or not events or len(events)>1000: raise ValueError()
         ids=set()
         for event in events:
             reason='event_type_missing_or_invalid'

@@ -67,3 +67,16 @@ def test_rejected_webhook_logs_structure_without_personal_values(client,monkeypa
     assert 'events' in caplog.text and 'array' in caplog.text
     assert 'private' not in caplog.text and signature not in caplog.text
     assert 'hook-secret' not in caplog.text
+
+
+def test_live_events_envelope_queues_subject_not_actor(client,db,monkeypatch):
+    monkeypatch.setattr(settings(),'wiw_webhook_secret','hook-secret')
+    payload={'events':[{'uuid':'event-example','createdAt':'2026-10-01T13:00:00Z',
+        'sentAt':'2026-10-01T13:00:05Z','userId':'999','type':'users::updated','data':{'userId':'45'}}]}
+    body=json.dumps(payload).encode()
+    signature=base64.b64encode(hmac.new(b'hook-secret',body,hashlib.sha256).digest()).decode()
+    headers={'X-Signed-Hmac-256':signature,'X-Account-Id':str(settings().wiw_account_id)}
+    for _ in range(2):
+        assert client.post('/webhooks/wiw',content=body,headers=headers).status_code==200
+    assert db.scalar(select(func.count()).select_from(WebhookBatch))==1
+    assert db.scalar(select(WebhookBatch)).user_ids==[45]

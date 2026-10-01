@@ -7,8 +7,8 @@ Official contracts reviewed October 1, 2026:
 Technical callback documents `X-Signed-Hmac-256` as base64 HMAC-SHA256 of
 raw request bytes using the signing secret, `X-Account-Id` as workplace ID,
 and `X-Webhook-Id` as batch UUID. The affected employee is `data.userId`;
-top-level `userId` is the actor, NOT the employee. Receiver accepts one event
-or an array of events. Only users::created/updated/deleted/invited are processed.
+top-level `userId` is the actor, NOT the employee. Receiver accepts the live-confirmed `{ "events": [...] }` batch envelope,
+one event, or an array of events. Only users::created/updated/deleted/invited are processed.
 
 ## Enable on the test workplace
 1. Deploy this release (including automatic database migration).
