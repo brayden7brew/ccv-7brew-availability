@@ -63,3 +63,27 @@ matches the pre-write snapshot minus those IDs. It also checks employee mapping,
 future effective date, portal timeline and remaining managed-event snapshots.
 A recovery audit is committed before continuing at the first unattempted index.
 It never repeats a deletion and refuses ambiguous create/update operations.
+
+### Explicit replacement after external state diverged
+
+`recover-requested-schedule --id ID --manager-email EMAIL --preserve-before YYYY-MM-DD`
+is an operator-authorized live recovery, not an automatic retry. Use only after
+confirming that the employee's original requested schedule should replace the
+current future WIW entries. It is limited to a stalled initial approval with no
+committed portal timeline, no activity for ten minutes, and all previously
+recorded creations now confirmed absent. The date must exactly match the saved
+request. A persisted recovery plan prevents rerunning this command.
+
+The command snapshots and rechecks current WIW state, preserves entries before
+the cutoff, creates the requested rules first, reads each new record back, and
+compares the entire state before editing/deleting conflicting future entries.
+It journals every operation and verifies the final complete state before marking
+the request applied. A response mismatch stops without proceeding to removal of
+old entries. A failed creation may itself have written an entry and therefore
+still requires inspection; the command must not be repeated.
+
+Recovery sends explicit UTC RFC-style timestamp strings, consistent with the
+format illustrated by the saved API schema. Live acceptance is verified at run
+time; tests alone do not establish that WIW will interpret those dates correctly.
+All-day 23:59:59 endpoints are normalized only for complete local calendar days.
+Timed shifts, missing recurrence, and altered dates never pass verification.

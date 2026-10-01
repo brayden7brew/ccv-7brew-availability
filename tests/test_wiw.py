@@ -284,3 +284,19 @@ def test_all_day_end_normalization_preserves_fall_dst_day():
     expected={'type':1,'all_day':True,'start_time':'2026-11-01T00:00:00-04:00','end_time':'2026-11-02T00:00:00-05:00'}
     actual={**expected,'end_time':'Mon, 02 Nov 2026 04:59:59 +0000'}
     assert event_signature(actual)==event_signature(expected)
+
+
+def test_recovery_uses_explicit_utc_rfc_dates_and_checks_original_instants(monkeypatch):
+    from dateutil.parser import parse
+    live(monkeypatch)
+    payload={'type':1,'start_time':'2026-10-18T00:00:00-04:00','end_time':'2026-10-18T05:15:00-04:00',
+        'all_day':False,'recurrence':'FREQ=WEEKLY;BYDAY=SU'}
+    def handle(request):
+        body=json.loads(request.content)
+        assert body['start_time']=='Sun, 18 Oct 2026 04:00:00 +0000'
+        assert body['end_time']=='Sun, 18 Oct 2026 09:15:00 +0000'
+        assert parse(body['start_time'])==parse(payload['start_time'])
+        assert 'rfc_dates' not in body
+        return httpx.Response(200,json={'availabilityevent':{'id':77,**body}})
+    change=SimpleNamespace(action='weekly',status='applying',manager_id=2,dry_run=False,wiw_user_id=20)
+    WIW(httpx.MockTransport(handle)).weekly_operation(change,{'action':'create','payload':payload,'rfc_dates':True})

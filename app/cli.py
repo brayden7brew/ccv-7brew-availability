@@ -47,6 +47,10 @@ def main():
     commands.add_parser('unresolved')
     inspect = commands.add_parser('inspect-request')
     inspect.add_argument('--id', type=int, required=True)
+    replace = commands.add_parser('recover-requested-schedule')
+    replace.add_argument('--id', type=int, required=True)
+    replace.add_argument('--manager-email', required=True)
+    replace.add_argument('--preserve-before', required=True)
     resume = commands.add_parser('resume-verified-deletions')
     resume.add_argument('--id', type=int, required=True)
     resume.add_argument('--manager-email', required=True)
@@ -90,7 +94,7 @@ def main():
             if not change: raise SystemExit('Request not found.')
             provider = WIW()
             approval = db.scalars(select(Audit).where(Audit.change_id == change.id,
-                Audit.event == 'approved').order_by(Audit.id.desc())).first()
+                Audit.event.in_(['approved','recovery_plan'])).order_by(Audit.id.desc())).first()
             entries = db.scalars(select(Audit).where(Audit.change_id == change.id,
                 Audit.event.in_(['operation_started','operation_succeeded','write_uncertain'])).order_by(Audit.id)).all()
             print(f'Request #{change.id}: {change.status}')
@@ -126,6 +130,16 @@ def main():
                 print(f"  {operation['action']} event {event_id}: {state}")
             print('Read-only inspection. No WIW writes or request status changes.')
             return
+        elif args.command == 'recover-requested-schedule':
+            from .replacement_recovery import recover_requested_schedule
+            from .wiw import WIWError
+            actor = db.scalar(select(User).where(User.email == args.manager_email.lower(),
+                User.role.in_(['manager','admin']), User.active.is_(True)))
+            if not actor: raise SystemExit('An active manager or administrator is required.')
+            try:
+                change = recover_requested_schedule(db, actor, args.id, args.preserve_before, WIW())
+            except (ValueError, WIWError) as exc: raise SystemExit(str(exc))
+            print(f'Request #{change.id}: {change.status}')
         elif args.command == 'resume-verified-deletions':
             from .weekly_workflow import resume_verified_deletions
             from .wiw import WIWError

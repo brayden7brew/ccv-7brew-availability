@@ -99,7 +99,7 @@ def reconcile_weekly(db, actor, change, outcome, note, provider):
     from .workflow import audit, canonical
     from dateutil.parser import parse
     approval = db.scalars(select(Audit).where(Audit.change_id == change.id,
-        Audit.event == 'approved').order_by(Audit.id.desc())).first()
+        Audit.event.in_(['approved','recovery_plan'])).order_by(Audit.id.desc())).first()
     if not approval:
         raise ValueError('No saved approved operation plan found.')
     current = provider.read(change.wiw_user_id, change.read_start, change.read_end)
@@ -154,7 +154,7 @@ def resume_verified_deletions(db, actor, change_id, provider):
             or date.fromisoformat(change.proposed['effective_date']) <= local_today()):
         raise ValueError('Employee mapping or start date no longer permits this approval.')
     approval = db.scalars(select(Audit).where(Audit.change_id == change.id,
-        Audit.event == 'approved').order_by(Audit.id.desc())).first()
+        Audit.event.in_(['approved','recovery_plan'])).order_by(Audit.id.desc())).first()
     if not approval: raise ValueError('No approved plan found.')
     operations = approval.details['operations']
     starts = db.scalars(select(Audit).where(Audit.change_id == change.id,

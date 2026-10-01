@@ -130,6 +130,13 @@ class WIW:
         if (change.action != 'weekly' or change.status != 'applying' or change.manager_id is None
                 or change.dry_run is not False or self.cfg.dry_run or self.cfg.wiw_mode != 'live'):
             raise WIWError('Write denied: approved live weekly dispatch required.')
+        wire_payload = dict(operation.get('payload', {}))
+        if operation.get('rfc_dates'):
+            from email.utils import format_datetime
+            for key in ('start_time', 'end_time'):
+                value = parse(wire_payload[key])
+                if value.tzinfo is None: raise WIWError('Write date must include a timezone.')
+                wire_payload[key] = format_datetime(value.astimezone(timezone.utc))
         if operation['action'] == 'delete':
             result = self.call('DELETE', f"/2/availabilityevents/{operation['event_id']}")
             if result.get('success') is not True:
@@ -145,7 +152,7 @@ class WIW:
                 result = {'success':True, 'verified_by':'event_get_404'}
         elif operation['action'] == 'update':
             result = self.call('PUT', f"/2/availabilityevents/{operation['event_id']}", payload={
-                **operation['payload'], 'user_id':change.wiw_user_id, 'account_id':self.cfg.wiw_account_id})
+                **wire_payload, 'user_id':change.wiw_user_id, 'account_id':self.cfg.wiw_account_id})
             events = result.get('availabilityevents')
             if (not isinstance(events, list) or len(events) != 1
                     or not isinstance(events[0], dict) or events[0].get('id') != operation['event_id']
@@ -157,7 +164,7 @@ class WIW:
             self.verify_payload(observed, operation['payload'])
         elif operation['action'] == 'create':
             result = self.call('POST', '/2/availabilityevents', payload={
-                **operation['payload'], 'user_id':change.wiw_user_id, 'account_id':self.cfg.wiw_account_id})
+                **wire_payload, 'user_id':change.wiw_user_id, 'account_id':self.cfg.wiw_account_id})
             event = result.get('availabilityevent', {})
             if (not isinstance(event, dict) or type(event.get('id')) is not int or event.get('user_id') != change.wiw_user_id
                     or event.get('account_id') != self.cfg.wiw_account_id):
