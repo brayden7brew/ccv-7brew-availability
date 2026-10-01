@@ -33,8 +33,8 @@ WIW live validation (2026-09-29): HTTP 400 / code 2006, “Choose a day to repea
 
 ### Reviewing existing WIW availability
 
-Managers can explicitly confirm a dated handover of external WIW preferences on
-an employee's request page. The saved submission snapshot is compared with WIW
+Approving a request automatically performs a dated handover of external WIW
+preferences. No separate replacement checkbox or operator command is required. The saved submission snapshot is compared with WIW
 again before any operation. External events ending before the effective date are
 left alone; future-only events are deleted; recurring series crossing the date
 are capped with COUNT using their original DTSTART. One-off events crossing the

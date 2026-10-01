@@ -19,10 +19,7 @@ test('rejection requires a nonblank reason while approval remains optional', () 
     handlers.submit({submitter,preventDefault(){prevented=true;}});
     return prevented;
   };
-  assert.equal(approve.disabled,true);
-  assert.equal(submit(approve),true);
-  confirmation.checked=true; noteHandlers.confirm();
-  assert.equal(approve.disabled,false); assert.equal(submit(approve),false);
+  assert.notEqual(approve.disabled,true); assert.equal(submit(approve),false);
   assert.equal(reject.disabled,true);
   assert.equal(submit(reject),true);
   assert.equal(submit({value:'approve'}),false);

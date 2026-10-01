@@ -164,15 +164,17 @@ def test_reconciliation_requires_complete_week(client,db,monkeypatch):
     assert len(db.scalars(select(ManagedEvent)).all())==2
 
 
-def test_unmanaged_preferences_are_not_deleted(client,db,monkeypatch):
+def test_dry_run_plans_default_replacement_without_writing(client,db,monkeypatch):
     from fastapi import HTTPException
     existing={'id':77,'user_id':1,'account_id':10,'type':1,'start_time':'2030-01-01T00:00:00-05:00','end_time':'2030-01-02T00:00:00-05:00'}
     provider=Fake({'availabilityevents':[existing]})
     monkeypatch.setattr('app.main.WIW',lambda:provider)
     submit(client)
-    with pytest.raises(HTTPException) as exc:
-        decide(db,db.get(User,2),1,'approve','',provider)
-    assert exc.value.status_code==409 and provider.writes==0
+    change = decide(db,db.get(User,2),1,'approve','',provider)
+    assert change.status == 'approved_dry_run' and provider.writes == 0
+    approval = db.scalars(select(Audit).where(Audit.change_id == 1, Audit.event == 'approved')).one()
+    assert approval.details['operations'][0] == {'action':'delete','event_id':77}
+    assert approval.details['retained_external_events'] == []
 
 
 def test_stale_server_template_never_shows_empty_submittable_week():

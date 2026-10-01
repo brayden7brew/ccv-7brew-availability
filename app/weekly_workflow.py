@@ -37,8 +37,6 @@ def approve_weekly(db, actor, change, note, provider, replace_existing=False):
             [e for e in current['availabilityevents'] if e['id'] not in known], effective)
     except ValueError as exc:
         raise HTTPException(409, str(exc))
-    if legacy_operations and not replace_existing:
-        raise HTTPException(409, 'Review the existing WIW availability and confirm replacement from the requested start date before approving.')
     if effective <= local_today():
         raise HTTPException(409, 'The start date has passed. Submit a request with a future start date.')
     profiles = {r.effective_date.isoformat():display_schedule(r) for r in rows}
@@ -47,8 +45,10 @@ def approve_weekly(db, actor, change, note, provider, replace_existing=False):
         payloads = event_plan(list(profiles.values()))
     except ValueError as exc:
         raise HTTPException(422, str(exc))
+    for operation in legacy_operations:
+        if operation['action'] == 'update': operation['rfc_dates'] = True
     operations = (legacy_operations + [{'action':'delete', 'event_id':m.event_id} for m in managed] +
-                  [{'action':'create', 'payload':p} for p in payloads])
+                  [{'action':'create', 'payload':p, 'rfc_dates':True} for p in payloads])
     change.manager_id, change.manager_note, change.dry_run = actor.id, note, dry_run
     change.status = 'approved_dry_run' if dry_run else 'applying'
     audit(db, change, actor, 'approved', {'note':note,'dry_run':dry_run,'pre_write_state':current,

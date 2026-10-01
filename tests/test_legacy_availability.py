@@ -45,7 +45,7 @@ def test_unparseable_or_crossing_recurrence_fails_without_a_plan():
     with pytest.raises(ValueError): handover([crossing],date(2026,10,15))
 
 
-def test_review_confirmation_live_handover_and_later_approval(client, db, monkeypatch):
+def test_default_live_handover_and_later_approval(client, db, monkeypatch):
     import copy
     from datetime import timedelta
     from sqlalchemy import select
@@ -60,8 +60,14 @@ def test_review_confirmation_live_handover_and_later_approval(client, db, monkey
     original=event()
     original.update(start_time=f'{today.isoformat()}T05:00:00-04:00',
                     end_time=f'{today.isoformat()}T10:00:00-04:00',recurrence='FREQ=DAILY')
+    future = {**original, 'id':78, 'recurrence':'',
+              'start_time':f'{(today+timedelta(days=30)).isoformat()}T05:00:00-04:00',
+              'end_time':f'{(today+timedelta(days=30)).isoformat()}T10:00:00-04:00'}
+    past = {**original, 'id':79, 'recurrence':'',
+            'start_time':f'{(today-timedelta(days=1)).isoformat()}T05:00:00-04:00',
+            'end_time':f'{(today-timedelta(days=1)).isoformat()}T10:00:00-04:00'}
     class Provider:
-        def __init__(self): self.events={77:original}; self.calls=[]; self.counter=100
+        def __init__(self): self.events=copy.deepcopy({77:original,78:future,79:past}); self.calls=[]; self.counter=100
         def read(self,*args): return {'availabilityevents':copy.deepcopy(list(self.events.values()))}
         def get(self,key,*args): return copy.deepcopy(self.events[key])
         def weekly_operation(self,change,op):
@@ -72,6 +78,7 @@ def test_review_confirmation_live_handover_and_later_approval(client, db, monkey
             if op['action']=='delete':
                 del self.events[op['event_id']]
                 return {'success':True}
+            assert 78 not in self.events, 'Future overlaps must be removed before creation'
             self.counter+=1
             result={'id':self.counter,'user_id':1,'account_id':10,**op['payload']}
             self.events[self.counter]=result
@@ -82,15 +89,18 @@ def test_review_confirmation_live_handover_and_later_approval(client, db, monkey
     sign_in(client,'manager@test.local')
     response=client.get('/requests/1')
     assert 'Existing When I Work availability' in response.text
-    assert 'name="replace_existing"' in response.text
+    assert 'name="replace_existing"' not in response.text
+    assert 'Approving automatically replaces' in response.text
     assert "script-src 'self'" in response.headers['content-security-policy']
-    with pytest.raises(HTTPException): decide(db,db.get(User,2),1,'approve','',provider)
-    assert provider.calls==[]
-    change=decide(db,db.get(User,2),1,'approve','',provider,replace_existing=True)
+    change=decide(db,db.get(User,2),1,'approve','',provider)
     assert change.status=='applied'
     assert provider.calls[0]['action']=='update'
+    assert all(op.get('rfc_dates') for op in provider.calls if op['action'] in ('create','update'))
     assert provider.events[77]['start_time']==original['start_time']
     assert 'COUNT=' in provider.events[77]['recurrence']
+    assert provider.events[79] == past
+    assert 78 not in provider.events
+    assert [op['action'] for op in provider.calls[:2]] == ['update','delete']
     assert 77 not in set(db.scalars(select(ManagedEvent.event_id)))
     submit(client)
     decide(db,db.get(User,2),2,'approve','',provider)
