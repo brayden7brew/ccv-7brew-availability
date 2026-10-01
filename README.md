@@ -199,3 +199,15 @@ The Admin menu now uses a role dropdown, primary and optional second location dr
 Up to five accounts may have administrator roles (including disabled accounts). Existing administrators can promote or demote other users; they cannot demote themselves. PostgreSQL serializes admin-role changes through a shared row lock. Operator create-user also enforces the cap.
 
 Email setup, worker deployment, delivery behavior and shared-mailbox requirements: [EMAIL-NOTIFICATIONS.md](docs/EMAIL-NOTIFICATIONS.md). The sender is alerts@rva7brew.com; email is not connected or enabled yet.
+
+### Import employees before their first sign-in
+
+On the Admin page, choose **Import employees from WIW**. This reads the documented
+`GET /2/users` endpoint using the configured workplace credentials. Only active,
+non-deleted users whose `account_id` matches `WIW_ACCOUNT_ID` are imported. New
+accounts get employee access and `WIW_AUTO_ENROLL_LOCATION`; WIW roles are not
+copied. Existing accounts, disabled status, roles, locations and notification
+addresses are preserved. Each new account is recorded in the access audit.
+Repeated imports do not duplicate users. No WIW writes or notification emails
+are triggered. Imported users sign in through WIW; no local password is created.
+This is an add-only import, not ongoing offboarding synchronization.

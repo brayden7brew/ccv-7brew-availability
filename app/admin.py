@@ -92,3 +92,27 @@ async def add_location(request: Request, db=Depends(get_db)):
         db.add(AdminAudit(actor_id=actor.id,target_id=actor.id,details={'location_added':name}))
         db.commit()
     return RedirectResponse('/admin',303)
+
+
+@router.post('/admin/import-wiw')
+async def import_wiw(request: Request, db=Depends(get_db)):
+    from .wiw import WIW, WIWError
+    from .roster import import_roster
+    from sqlalchemy.exc import IntegrityError
+    actor = require_admin(request, db)
+    form = await request.form(max_fields=5)
+    csrf(request, form.get('csrf'))
+    lock_admin_changes(db)
+    db.refresh(actor)
+    if actor.role != 'admin':
+        raise HTTPException(403, 'Administrator access is required.')
+    try:
+        count = import_roster(db, actor, WIW())
+        db.commit()
+    except WIWError as exc:
+        db.rollback()
+        raise HTTPException(502, str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, 'An employee signed in while importing. Run the import again.') from exc
+    return RedirectResponse(f'/admin?imported={count}', 303)
