@@ -53,7 +53,7 @@
     credit.textContent = minimum > 0
       ? `${counted / 60} of ${minimum / 60} required hours counted · Maximum 10 hours per day.`
       : `${counted / 60} hours counted · No weekly minimum applies.`;
-    if (counted < minimum) errors.push(`Add ${(minimum - counted) / 60} more counted hours to meet your weekly minimum.`);
+    if (counted < minimum) errors.push(`Add ${(minimum - counted) / 60} more counted hours to meet your weekly minimum. If you need to provide fewer hours, contact your stand manager to discuss an exception.`);
     if (note.value.length > 2000) errors.push('Keep your note to 2,000 characters or fewer.');
     if (blocked) errors.push('Your 30-day request limit has been reached. See the date above for your next request.');
     feedback.textContent = errors.length ? errors.join(' ') : 'Your request is ready to send.';

@@ -29,5 +29,5 @@ def validate_employee_rules(db,user,data):
     if data.effective_date<rules['earliest']:
         raise HTTPException(422,f"Your availability must start on or after {rules['earliest'].isoformat()} ({rules['notice_days']} days’ notice).")
     if rules['minimum_enabled'] and counted<rules['minimum_minutes']:
-        raise HTTPException(422,f"Provide at least {rules['minimum_hours']:g} available hours per week between 5 a.m. and 11 p.m. At most 10 hours per day count toward this minimum. Your request counts as {counted/60:g} hours.")
+        raise HTTPException(422,f"Provide at least {rules['minimum_hours']:g} available hours per week between 5 a.m. and 11 p.m. At most 10 hours per day count toward this minimum. Your request counts as {counted/60:g} hours. If you need to provide fewer hours, contact your stand manager to discuss an exception.")
     return {**rules,'earliest':rules['earliest'].isoformat(),'counted_minutes':counted}
