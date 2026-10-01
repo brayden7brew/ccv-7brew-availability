@@ -54,3 +54,16 @@ def test_worker_bad_account_rolls_back(client,db,monkeypatch):
     db.expire_all()
     assert db.scalar(select(WebhookBatch)).status=='retry'
     assert db.scalar(select(User).where(User.wiw_user_id==45)) is None
+
+
+def test_rejected_webhook_logs_structure_without_personal_values(client,monkeypatch,caplog):
+    monkeypatch.setattr(settings(),'wiw_webhook_secret','hook-secret')
+    payload={'events':[{'type':'users::updated','data':{'userId':'private-employee-value','fields':{'email':{'new':'private@example.com'}}}}]}
+    body=json.dumps(payload).encode()
+    signature=base64.b64encode(hmac.new(b'hook-secret',body,hashlib.sha256).digest()).decode()
+    response=client.post('/webhooks/wiw',content=body,headers={'X-Signed-Hmac-256':signature,'X-Account-Id':str(settings().wiw_account_id)})
+    assert response.status_code==400
+    assert 'WIW webhook rejected' in caplog.text
+    assert 'events' in caplog.text and 'array' in caplog.text
+    assert 'private' not in caplog.text and signature not in caplog.text
+    assert 'hook-secret' not in caplog.text

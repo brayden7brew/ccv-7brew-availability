@@ -3,6 +3,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 from datetime import timedelta
 from fastapi import APIRouter, Request, Depends, HTTPException
 from sqlalchemy import select, delete
@@ -16,6 +17,19 @@ from .notifications import valid_email
 from .roster import import_schedules
 
 router=APIRouter()
+logger=logging.getLogger(__name__)
+
+
+def payload_shape(value, depth=0):
+    # Only structural field names are allowed; never log payload values or HR fields.
+    if depth>4: return type(value).__name__
+    if isinstance(value,dict):
+        known={'events','data','payload','body','messages','type','userId','user_id','uuid','createdAt','sentAt','accountId','fields'}
+        return {'kind':'object','fields':{key:payload_shape(item,depth+1) for key,item in value.items() if key in known and key!='fields'},
+                'other_field_count':sum(key not in known for key in value)}
+    if isinstance(value,list): return {'kind':'array','count':len(value),'first':payload_shape(value[0],depth+1) if value else None}
+    return type(value).__name__
+
 
 @router.post('/webhooks/wiw')
 async def receive(request: Request,db=Depends(get_db)):
@@ -30,18 +44,24 @@ async def receive(request: Request,db=Depends(get_db)):
         raise HTTPException(403,'Invalid webhook signature.')
     if request.headers.get('X-Account-Id')!=str(cfg.wiw_account_id):
         raise HTTPException(403,'Unexpected WIW workplace.')
+    payload=None
+    reason='invalid_json'
     try:
         payload=json.loads(raw)
+        reason='batch_shape'
         events=payload if isinstance(payload,list) else [payload]
         if not events or len(events)>1000: raise ValueError()
         ids=set()
         for event in events:
+            reason='event_type_missing_or_invalid'
             if not isinstance(event,dict) or not isinstance(event.get('type'),str): raise ValueError()
             if event['type'] not in ('users::created','users::updated','users::deleted','users::invited'): continue
+            reason='affected_user_id_missing_or_invalid'
             value=event.get('data',{}).get('userId')
             if isinstance(value,bool) or not str(value).isdigit() or int(value)<=0: raise ValueError()
             ids.add(int(value))
     except (ValueError,TypeError,AttributeError):
+        logger.warning('WIW webhook rejected: reason=%s structure=%s',reason,json.dumps(payload_shape(payload),sort_keys=True))
         raise HTTPException(400,'Unexpected webhook event format.') from None
     if not ids: return {'accepted':True}
     key=hashlib.sha256(raw).hexdigest()
