@@ -52,3 +52,14 @@ retained events in the expected final state.
 Live WIW acceptance of an update with a historical DTSTART still needs a test
 against the test workplace. If WIW rejects it under its documented start-time
 restriction, the portal stops instead of deleting/recreating historical entries.
+
+### Recovering a confirmed deletion prefix
+
+`python -m app.cli resume-verified-deletions --id REQUEST_ID --manager-email ADMIN_EMAIL`
+continues an existing approved live plan and DOES write to WIW. It only accepts
+`needs_reconciliation` requests where every attempted operation was a delete,
+every deleted ID now returns HTTP 404, and the complete remaining read window
+matches the pre-write snapshot minus those IDs. It also checks employee mapping,
+future effective date, portal timeline and remaining managed-event snapshots.
+A recovery audit is committed before continuing at the first unattempted index.
+It never repeats a deletion and refuses ambiguous create/update operations.

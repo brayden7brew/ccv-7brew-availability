@@ -54,8 +54,15 @@ def approve_weekly(db, actor, change, note, provider, replace_existing=False):
     audit(db, change, actor, 'approved', {'note':note,'dry_run':dry_run,'pre_write_state':current,
         'managed_event_snapshots':fresh, 'retained_external_events':retained, 'replace_existing':bool(legacy_operations), 'operations':operations, 'weekly_schedule':change.proposed})
     db.commit()
-    if not dry_run:
-        for index, operation in enumerate(operations):
+    return dispatch_weekly(db, actor, change, operations, provider)
+
+
+def dispatch_weekly(db, actor, change, operations, provider, start_index=0):
+    from .workflow import audit
+    managed = db.scalars(select(ManagedEvent).where(ManagedEvent.employee_id == change.employee_id,
+        ManagedEvent.active.is_(True))).all()
+    if not change.dry_run:
+        for index, operation in enumerate(operations[start_index:], start=start_index):
             audit(db, change, actor, 'operation_started', {'index':index, 'operation':operation})
             db.commit()
             try:
@@ -77,7 +84,7 @@ def approve_weekly(db, actor, change, note, provider, replace_existing=False):
         change.status = 'applied'
         audit(db, change, actor, 'applied', {'operation_count':len(operations)})
     db.add(WeeklySchedule(change_id=change.id, employee_id=change.employee_id,
-        effective_date=effective, days=change.proposed['days'], dry_run=dry_run))
+        effective_date=date.fromisoformat(change.proposed['effective_date']), days=change.proposed['days'], dry_run=change.dry_run))
     db.commit()
     return change
 
@@ -127,3 +134,63 @@ def reconcile_weekly(db, actor, change, outcome, note, provider):
             db.add(ManagedEvent(employee_id=change.employee_id,event_id=snapshot['id'],snapshot=snapshot))
     change.status='reconciled_applied' if outcome=='applied' else 'reconciled_not_applied'
     audit(db,change,actor,change.status,{'note':note,'observed_state':current})
+
+
+def resume_verified_deletions(db, actor, change_id, provider):
+    """Continue only an approved plan whose attempted prefix consists of absent deletes."""
+    from .models import Change, User, Audit
+    from .workflow import allowed, audit, canonical
+    existing = db.get(Change, change_id)
+    if not existing:
+        raise ValueError('Request not found.')
+    employee = db.scalar(select(User).where(User.id == existing.employee_id).with_for_update())
+    change = db.scalar(select(Change).where(Change.id == change_id).with_for_update().execution_options(populate_existing=True))
+    if (not actor.active or actor.role not in ('manager', 'admin') or actor.id == employee.id
+            or (actor.role != 'admin' and not allowed(db, actor, change))):
+        raise ValueError('An authorized manager or administrator must recover this request.')
+    if (change.action != 'weekly' or change.status != 'needs_reconciliation' or change.dry_run
+            or settings().dry_run or settings().wiw_mode != 'live'):
+        raise ValueError('Recovery requires an unresolved, approved live weekly request.')
+    from .locations import assigned_locations
+    if (not employee.active or employee.wiw_user_id != change.wiw_user_id
+            or set(assigned_locations(employee)) != set(assigned_locations(change))
+            or date.fromisoformat(change.proposed['effective_date']) <= local_today()):
+        raise ValueError('Employee mapping or start date no longer permits this approval.')
+    approval = db.scalars(select(Audit).where(Audit.change_id == change.id,
+        Audit.event == 'approved').order_by(Audit.id.desc())).first()
+    if not approval: raise ValueError('No approved plan found.')
+    operations = approval.details['operations']
+    starts = db.scalars(select(Audit).where(Audit.change_id == change.id,
+        Audit.event == 'operation_started').order_by(Audit.id)).all()
+    if not starts: raise ValueError('No attempted deletion to verify.')
+    deleted = set()
+    for index, entry in enumerate(starts):
+        if (index >= len(operations) or entry.details.get('index') != index
+                or entry.details.get('operation') != operations[index]
+                or operations[index]['action'] != 'delete'):
+            raise ValueError('Recovery is limited to a deletion-only prefix. No writes performed.')
+        event_id = operations[index]['event_id']
+        try:
+            provider.get(event_id, change.wiw_user_id)
+        except WIWError as exc:
+            if exc.reason != 'http_error' or exc.http_status != 404:
+                raise ValueError('Could not verify the deleted event is absent.') from exc
+        else:
+            raise ValueError('An attempted deletion is still present. No writes performed.')
+        deleted.add(event_id)
+    expected = {'availabilityevents':[e for e in approval.details['pre_write_state']['availabilityevents'] if e['id'] not in deleted]}
+    if canonical(provider.read(change.wiw_user_id, change.read_start, change.read_end)) != canonical(expected):
+        raise ValueError('Other WIW availability changed. No writes performed.')
+    for event in approval.details['managed_event_snapshots']:
+        if event['id'] not in deleted and provider.get(event['id'], change.wiw_user_id) != event:
+            raise ValueError('Another managed event changed. No writes performed.')
+    if timeline_ids(timeline(db, change.employee_id, False)) != change.before['timeline_ids']:
+        raise ValueError('The approved portal schedule changed. No writes performed.')
+    for item in db.scalars(select(ManagedEvent).where(ManagedEvent.employee_id == employee.id,
+            ManagedEvent.event_id.in_(deleted))):
+        item.active = False
+    audit(db, change, actor, 'recovery_verified', {'deleted_event_ids':sorted(deleted),
+        'next_operation':len(starts), 'approval_id':approval.id})
+    change.status = 'applying'
+    db.commit()
+    return dispatch_weekly(db, actor, change, operations, provider, start_index=len(starts))

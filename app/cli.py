@@ -35,6 +35,9 @@ def main():
     commands.add_parser('unresolved')
     inspect = commands.add_parser('inspect-request')
     inspect.add_argument('--id', type=int, required=True)
+    resume = commands.add_parser('resume-verified-deletions')
+    resume.add_argument('--id', type=int, required=True)
+    resume.add_argument('--manager-email', required=True)
     reconcile = commands.add_parser('reconcile')
     reconcile.add_argument('--id', type=int, required=True)
     reconcile.add_argument('--manager-email', required=True)
@@ -102,6 +105,17 @@ def main():
                 print(f"  {operation['action']} event {event_id}: {state}")
             print('Read-only inspection. No WIW writes or request status changes.')
             return
+        elif args.command == 'resume-verified-deletions':
+            from .weekly_workflow import resume_verified_deletions
+            from .wiw import WIWError
+            actor = db.scalar(select(User).where(User.email == args.manager_email.lower(),
+                User.role.in_(['manager','admin']), User.active.is_(True)))
+            if not actor: raise SystemExit('Active manager or administrator required.')
+            try:
+                change = resume_verified_deletions(db, actor, args.id, WIW())
+            except (ValueError, WIWError) as exc:
+                raise SystemExit(str(exc))
+            print(f'Request #{change.id}: {change.status}')
         elif args.command == 'reconcile':
             change = db.scalar(select(Change).where(Change.id == args.id).with_for_update())
             actor = db.scalar(select(User).where(User.email == args.manager_email.lower(), User.role.in_(['manager','admin']), User.active.is_(True)))
