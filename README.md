@@ -253,9 +253,9 @@ recent access log are grouped into collapsible sections beneath the directory.
 ### Per-employee availability rules
 Each employee card has **Availability requirements**. Defaults are a 15-hour
 weekly minimum, counting only the overlap with 05:00–23:00 each day in the
-business timezone, and 14 calendar days of advance notice. Each rule has its own
+business timezone, capped at 10 counted hours per day (including all-day availability), and 14 calendar days of advance notice. Longer availability remains saved in full; the cap only affects credit toward the minimum. Each rule has its own
 on/off control. Minimum hours can be edited in quarter-hour increments (up to
-126 hours), and notice can be 1–366 days. Turning notice off allows tomorrow,
+70 hours), and notice can be 1–366 days. Turning notice off allows tomorrow,
 not past/today start dates. The older MINIMUM_NOTICE_DAYS environment variable
 no longer controls weekly submissions.
 

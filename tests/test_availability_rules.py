@@ -12,11 +12,11 @@ def data(days=14, hours='all_day'):
 
 
 def test_count_only_operating_window():
-    assert counted_minutes([{'mode':'all_day'}]*7)==126*60
+    assert counted_minutes([{'mode':'all_day'}]*7)==70*60
     assert counted_minutes([{'mode':'hours','start':'03:00','end':'06:00'}])==60
     assert counted_minutes([{'mode':'hours','start':'22:00','end':'00:00'}])==60
     assert counted_minutes([{'mode':'hours','start':'00:00','end':'04:59'}])==0
-    assert counted_minutes([{'mode':'hours','start':'05:00','end':'20:00'}])==900
+    assert counted_minutes([{'mode':'hours','start':'05:00','end':'20:00'}])==600
 
 
 def test_default_notice_and_first_request_exception(db):
@@ -33,9 +33,16 @@ def test_default_notice_and_first_request_exception(db):
 def test_minimum_threshold_and_disable(db):
     person=db.get(User,1)
     proposal=data()
-    proposal.days=[type(proposal.days[0])(mode='hours',start='05:00',end='20:00')]+[type(proposal.days[0])(mode='none')]*6
-    validate_employee_rules(db,person,proposal)
-    proposal.days[0].end='19:59'
+    day_type=type(proposal.days[0])
+    proposal.days=[day_type(mode='hours',start='05:00',end='23:00')]+[day_type(mode='none')]*6
+    with pytest.raises(HTTPException,match='10 hours per day'):
+        validate_employee_rules(db,person,proposal)
+    proposal.days[0]=day_type(mode='all_day')
+    with pytest.raises(HTTPException):validate_employee_rules(db,person,proposal)
+    proposal.days[1]=day_type(mode='hours',start='05:00',end='10:00')
+    snapshot=validate_employee_rules(db,person,proposal)
+    assert snapshot['counted_minutes']==900 and snapshot['daily_count_cap_minutes']==600
+    proposal.days[1].end='09:59'
     with pytest.raises(HTTPException):validate_employee_rules(db,person,proposal)
     person.minimum_hours_enabled=False
     validate_employee_rules(db,person,data(hours='none'))
@@ -67,3 +74,16 @@ def test_admin_can_set_and_disable_rules(client,db):
     assert not person.minimum_hours_enabled and not person.notice_enabled
     form['minimum_hours']='NaN'
     assert client.post('/admin/users/1/rules',data=form).status_code==422
+
+
+def test_one_long_day_is_rejected_before_submission(client,db):
+    csrf=sign_in(client)
+    form={'csrf':csrf,'action':'weekly','effective_date':(local_today()+timedelta(days=14)).isoformat()}
+    form.update({f'day_{i}_mode':'none' for i in range(7)})
+    form.update(day_0_mode='hours',day_0_start='05:00',day_0_end='23:00')
+    assert client.post('/requests',data=form).status_code==422
+    assert db.query(Change).count()==0
+    form.update(day_1_mode='hours',day_1_start='05:00',day_1_end='10:00')
+    assert client.post('/requests',data=form).status_code==200
+    change=db.query(Change).one()
+    assert change.proposed['days'][0]['end']=='23:00'
