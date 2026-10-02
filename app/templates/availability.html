@@ -6,10 +6,10 @@
 {% if calendar is none %}<p class="error" role="alert">We couldn’t load your hours from When I Work. Refresh this page to try again.</p>
 {% else %}
 <div class="calendar-week">
-<div class="calendar-axis" aria-hidden="true"><div class="calendar-day-heading"></div><div class="calendar-track">{% for hour in [5,8,11,14,17,20,23] %}<span style="top:{{ (hour-5)/18*100 }}%">{{ hour % 12 or 12 }} {{ 'AM' if hour < 12 else 'PM' }}</span>{% endfor %}</div></div>
+<div class="calendar-axis" aria-hidden="true"><div class="calendar-day-heading"></div><div class="calendar-track">{% for hour in [5,8,11,14,17,20,23] %}<span>{{ hour % 12 or 12 }} {{ 'AM' if hour < 12 else 'PM' }}</span>{% endfor %}</div></div>
 {% for day in calendar %}<article class="calendar-day {% if day.date == today %}calendar-today{% endif %}" aria-label="{{ day.date.strftime('%A, %B %-d') }}">
 <div class="calendar-day-heading"><span>{{ day.date.strftime('%a') }}</span><strong>{{ day.date.day }}</strong>{% if day.date == today %}<small>Today</small>{% endif %}</div>
-<div class="calendar-track" aria-hidden="true">{% for window in day.windows %}<div class="availability-block" style="top:{{ window.top }}%;height:{{ window.height }}%" title="{{ window.label }}"></div>{% endfor %}</div>
+<div class="calendar-track" aria-hidden="true"><svg class="calendar-windows" viewBox="0 0 100 100" preserveAspectRatio="none">{% for window in day.windows %}<rect class="availability-block" x="4" y="{{ window.top }}" width="92" height="{{ window.height }}" rx="2" vector-effect="non-scaling-stroke"><title>{{ window.label }}</title></rect>{% endfor %}</svg></div>
 <div class="calendar-day-hours">{% for window in day.windows %}<span>{{ window.label }}</span>{% else %}<span class="muted">Not available</span>{% endfor %}</div>
 </article>{% endfor %}
 </div>
