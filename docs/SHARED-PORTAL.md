@@ -41,8 +41,12 @@ portal. Failed upstream requests return a temporary-unavailable response, not fa
 metrics. Ops continues owning its original database, reporting jobs and alerts.
 No extra Xenial credentials or duplicate polling workers are needed.
 
-The existing native iPhone Ops project and standalone Ops login are unchanged by this
-web portal integration. The unified app currently uses the mobile Home Screen web app.
+The iPhone project in the Ops repository now opens this shared portal in a persistent
+WebKit browser, using the same login and server permissions. Rebuild and install that
+project to update an existing iPhone app; a web deployment alone does not update the
+installed binary. The native app identifies itself with `CCVPortalApp/1.0`, which
+suppresses Home Screen installation instructions. The standalone Ops login and old
+mobile API remain supported.
 
 ## Extending it
 

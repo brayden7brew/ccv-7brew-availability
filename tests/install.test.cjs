@@ -50,3 +50,10 @@ test('Android offers native installation only after browser support is confirmed
   events.appinstalled();
   assert.equal(ids['install-help'].hidden,true);
 });
+
+// The native app already has an icon; never ask it to install itself.
+test('native CCV app suppresses Home Screen instructions', () => {
+  const {ids}=page('iPhone CCVPortalApp/1.0');
+  assert.equal(ids['install-panel'].hidden,true);
+  assert.equal(ids['install-help'].hidden,true);
+});

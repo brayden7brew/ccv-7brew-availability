@@ -4,7 +4,7 @@
   const trigger = document.getElementById('install-help');
   const install = document.getElementById('install-app');
   const steps = document.getElementById('install-steps');
-  if (!panel) return;
+  if (!panel || /CCVPortalApp\//.test(navigator.userAgent)) return;
   const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const mobile = ios || /Android/.test(navigator.userAgent);
   const standalone = window.matchMedia('(display-mode: standalone)');
