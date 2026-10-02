@@ -30,3 +30,17 @@ a{color:inherit}.topbar{min-height:74px;padding:10px clamp(18px,4vw,58px);displa
 .ops-module header{display:block;background:transparent;border:0;padding:0;}
 .ops-module .overview-page{margin-top:0}.ops-module .overview-card-heading{flex-direction:column;align-items:flex-start;gap:8px}.ops-module .overview-card-heading h2{overflow-wrap:normal;word-break:normal}.ops-module .stand-overview-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}.ops-module .stand-overview-card,.ops-module .stand-overview-card:nth-child(4),.ops-module .stand-overview-card:nth-child(5){grid-column:auto}.ops-module .overview-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media(max-width:600px){.ops-module{padding:16px}.ops-module .history-grid{grid-template-columns:1fr}.ops-module .portal-hero h1{font-size:2.3rem}}
+
+/* Give the dashboard room beyond the narrower availability forms. */
+main:has(.ops-module){width:96%;max-width:1800px;padding:28px 0 65px}
+@media(min-width:1100px){
+  .ops-module{padding:32px}
+  .ops-module .stand-overview-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+  .ops-module .stand-overview-card{padding:24px}
+  .ops-module .overview-card-heading h2{font-size:28px}
+  .ops-module .overview-metric{padding:14px}
+  .ops-module .overview-metric strong{font-size:30px}
+  .ops-module .overview-metric small{font-size:14px}
+  .ops-module .overview-status{font-size:14px}
+}
+@media(max-width:650px){main:has(.ops-module){width:auto;margin:0 16px;padding-top:20px}}
