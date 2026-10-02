@@ -20,7 +20,9 @@ def test_manager_review_has_working_hours_and_labeled_escaped_comment(client,db)
     sign_in(client,'manager@test.local')
     html=client.get('/requests/1').text
     assert '116h available' in html  # six full 18-hour days and one 8-hour day
-    assert '5:00 AM – 11:00 PM' in html
+    assert 'Requested unavailable hours' in html
+    assert 'Unavailable from 5:00 AM – 9:00 AM' in html
+    assert 'Unavailable from 5:00 PM – 11:00 PM' in html
     assert '168-hour' not in html and 'including nights' not in html
     assert 'aria-labelledby="employee-comment-heading"' in html
     assert 'Employee’s comment to the manager' in html

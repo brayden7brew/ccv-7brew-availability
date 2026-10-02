@@ -31,30 +31,50 @@
     for (const row of rows) {
       const mode = row.querySelector('[name$="_mode"]').value;
       const timed = mode === 'hours' || mode === 'unavailable';
-      const start = row.querySelector('[name$="_start"]');
-      const end = row.querySelector('[name$="_end"]');
+      const periods = Array.from(row.querySelectorAll('.unavailable-period'));
       const message = row.querySelector('.day-error');
-      const fromMinute = minute(start.value);
-      start.disabled = !timed;
-      end.disabled = !timed || fromMinute === null;
-      for (const option of end.options) {
-        option.disabled = option.value !== '' && (fromMinute === null || minute(option.value) <= fromMinute);
-      }
-      if (fromMinute !== null && end.value && minute(end.value) <= fromMinute) end.value = '';
-      start.required = end.required = timed;
+      const add = row.querySelector('.add-period');
+      add.hidden = mode !== 'unavailable';
+      add.disabled = periods.length >= 6;
       let error = '';
-      if (mode === 'all_day') counted += 600;
-      else if (timed) {
+      const spans = [];
+      periods.forEach((period, index) => {
+        const active = timed && (mode === 'unavailable' || index === 0);
+        period.hidden = mode === 'hours' && index > 0;
+        period.setAttribute('role', 'group');
+        period.setAttribute('aria-label', `${row.dataset.day} unavailable period ${index + 1}`);
+        const start = period.querySelector('[name$="_start"]');
+        const end = period.querySelector('[name$="_end"]');
+        period.querySelector('.remove-period').hidden = mode !== 'unavailable' || periods.length === 1;
         const from = minute(start.value);
+        start.disabled = !active;
+        end.disabled = !active || from === null;
+        for (const option of end.options) {
+          option.disabled = option.value !== '' && (from === null || minute(option.value) <= from);
+        }
+        if (active && from !== null && end.value && minute(end.value) <= from) end.value = '';
+        start.required = end.required = active;
         const to = minute(end.value);
-        if (from === null || to === null) error = 'Choose both a From and To time.';
-        else if (to <= from) error = 'To must be later than From.';
-        else counted += Math.min(600, mode === 'unavailable' ? 1080 - (to - from) : to - from);
-      } else if (mode !== 'none') error = 'Choose an availability option.';
+        if (active) {
+          if (from === null || to === null) error = 'Choose both a From and To time for each period.';
+          else if (to <= from) error = 'To must be later than From.';
+          else spans.push([from, to]);
+        }
+      });
+      spans.sort((a, b) => a[0] - b[0]);
+      if (spans.some((span, i) => i > 0 && span[0] < spans[i - 1][1])) {
+        error = 'Unavailable periods must not overlap. Adjust or remove the overlapping period.';
+      }
+      if (mode === 'all_day') counted += 600;
+      else if (timed && !error) {
+        const duration = spans.reduce((sum, span) => sum + span[1] - span[0], 0);
+        counted += Math.min(600, mode === 'unavailable' ? 1080 - duration : duration);
+      } else if (!timed && mode !== 'none') error = 'Choose an availability option.';
       message.textContent = error;
       message.hidden = !error;
-      start.setAttribute('aria-invalid', String(Boolean(error)));
-      end.setAttribute('aria-invalid', String(Boolean(error)));
+      periods.forEach(period => {
+        period.querySelectorAll('select').forEach(field => field.setAttribute('aria-invalid', String(!field.disabled && Boolean(error))));
+      });
       if (error) errors.push(`${row.dataset.day}: ${error}`);
     }
     credit.textContent = minimum > 0
@@ -68,6 +88,22 @@
     button.disabled = sending || errors.length > 0;
     return errors.length === 0;
   }
+
+  form.addEventListener('click', event => {
+    const add = event.target.closest('.add-period');
+    const remove = event.target.closest('.remove-period');
+    if (!add && !remove) return;
+    const row = event.target.closest('.day-row');
+    const periods = row.querySelectorAll('.unavailable-period');
+    if (add && periods.length < 6) {
+      const period = periods[0].cloneNode(true);
+      period.querySelectorAll('select').forEach(field => { field.value = ''; });
+      add.before(period);
+    } else if (remove && periods.length > 1) {
+      remove.closest('.unavailable-period').remove();
+    }
+    validate();
+  });
 
   form.addEventListener('input', validate);
   form.addEventListener('change', validate);

@@ -63,3 +63,42 @@ def test_home_calendar_is_monday_first_and_below_change_button(client, monkeypat
     assert html.index('home-availability-action') < html.index('My current availability') < html.index('calendar-week')
     assert html.index('>Mon</span>') < html.index('>Sun</span>')
     assert 'install-panel' not in html
+
+
+def test_split_periods_validation_and_wiw_plan():
+    import pytest
+    from pydantic import ValidationError
+    days = [dict(mode='none') for _ in DAYS]
+    days[1] = dict(mode='unavailable', ranges=[dict(start='05:00', end='09:30'), dict(start='17:00', end='22:00')])
+    data = WeeklyInput(effective_date=local_today()+timedelta(days=30), days=days)
+    stored = data.model_dump(mode='json')
+    assert counted_minutes(stored['days']) == 510
+    monday = [e for e in event_plan([stored]) if e['recurrence'].endswith('BYDAY=MO')]
+    assert [(parse(e['start_time']).strftime('%H:%M'), parse(e['end_time']).strftime('%H:%M')) for e in monday] == [('05:00','09:30'),('17:00','22:00')]
+    days[1]['ranges'][1]['start'] = '09:15'
+    with pytest.raises(ValidationError, match='overlap'):
+        WeeklyInput(effective_date=data.effective_date, days=days)
+    days[1]['ranges'][1]['start'] = '09:30'
+    adjacent = WeeklyInput(effective_date=data.effective_date, days=days)
+    assert blocked(adjacent.model_dump()['days'][1]) == [(300,1320)]
+    days[1]['ranges'][1]['end'] = '23:15'
+    with pytest.raises(ValidationError):
+        WeeklyInput(effective_date=data.effective_date, days=days)
+
+
+def test_split_submission_preserves_ranges_and_manager_display(client, db):
+    from urllib.parse import urlencode
+    token = sign_in(client)
+    values = [('csrf',token), ('action','weekly'), ('effective_date',(local_today()+timedelta(days=30)).isoformat())]
+    values += [(f'day_{i}_mode', 'unavailable' if i==1 else 'all_day' if i==2 else 'none') for i in range(7)]
+    values += [('day_1_start','05:00'),('day_1_end','09:30'),('day_1_start','17:00'),('day_1_end','22:00')]
+    response = client.post('/requests', content=urlencode(values), headers={'Content-Type':'application/x-www-form-urlencoded'}, follow_redirects=False)
+    assert response.status_code == 303
+    change = db.query(Change).one()
+    assert len(change.proposed['days'][1]['ranges']) == 2
+    assert counted_minutes(change.proposed['days']) == 1110
+    sign_in(client,'manager@test.local')
+    html = client.get(f'/requests/{change.id}').text
+    assert 'Requested unavailable hours' in html
+    assert 'Unavailable from 5:00 AM – 9:30 AM' in html
+    assert 'Unavailable from 5:00 PM – 10:00 PM' in html

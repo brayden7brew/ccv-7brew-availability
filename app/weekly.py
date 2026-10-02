@@ -14,14 +14,37 @@ from .models import WeeklySchedule
 
 DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
+class UnavailableRange(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    start: str
+    end: str
+
+    @model_validator(mode='after')
+    def valid(self):
+        allowed = {f'{m//60:02d}:{m%60:02d}' for m in range(300, 1381, 15)}
+        if self.start not in allowed or self.end not in allowed or self.end <= self.start:
+            raise ValueError('Choose unavailable From and To times between 5 AM and 11 PM in 15-minute steps, with To later than From.')
+        return self
+
+
 class DayHours(BaseModel):
     model_config = ConfigDict(extra='forbid')
     mode: Literal['hours', 'unavailable', 'all_day', 'none'] = 'none'
     start: str = ''
     end: str = ''
+    ranges: list[UnavailableRange] = Field(default_factory=list, max_length=6)
 
     @model_validator(mode='after')
     def valid(self):
+        if self.mode == 'unavailable' and self.ranges:
+            spans = sorted(self.ranges, key=lambda r: r.start)
+            if any(a.end > b.start for a, b in zip(spans, spans[1:])):
+                raise ValueError('Unavailable periods must not overlap. Adjust or remove the overlapping period.')
+            self.ranges = spans
+            self.start = self.end = ''
+            return self
+        if self.mode != 'unavailable':
+            self.ranges = []
         if self.mode not in ('hours', 'unavailable'):
             self.start = self.end = ''
             return self
@@ -83,6 +106,15 @@ def end_minutes(value):
 def blocked(day):
     if day['mode'] == 'all_day': return []
     if day['mode'] == 'none': return [(0, 1440)]
+    if day['mode'] == 'unavailable' and day.get('ranges'):
+        merged = []
+        for span in sorted(day['ranges'], key=lambda r: r['start']):
+            start, end = minutes(span['start']), minutes(span['end'])
+            if merged and start <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+            else:
+                merged.append((start, end))
+        return merged
     start, end = minutes(day['start']), end_minutes(day['end'])
     if day['mode'] == 'unavailable': return [(start, end)]
     return [(a,b) for a,b in [(0,start),(end,1440)] if a < b]
@@ -142,3 +174,9 @@ def week_totals(schedule):
         hours, mins = divmod(value, 60)
         return f'{hours}h' + (f' {mins}m' if mins else '')
     return {'available': label(available), 'unavailable': label(7*1080-available)}
+
+
+def unavailable_hour_labels(day):
+    return [(f'{max(start,300)//60:02d}:{max(start,300)%60:02d}',
+             f'{min(end,1380)//60:02d}:{min(end,1380)%60:02d}')
+            for start, end in blocked(day) if max(start,300) < min(end,1380)]

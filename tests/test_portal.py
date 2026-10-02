@@ -43,7 +43,7 @@ def test_employee_submission_and_dry_run(client, db):
     submit(client)
     c = db.scalar(select(Change))
     assert c.status == 'pending'
-    assert c.proposed['days'][0] == {'mode':'hours','start':'09:00','end':'17:00'}
+    assert c.proposed['days'][0] == {'mode':'hours','start':'09:00','end':'17:00','ranges':[]}
     provider = Fake()
     decide(db, db.get(User,2), c.id, 'approve','Fine', provider)
     assert c.status == 'approved_dry_run' and provider.writes == 0

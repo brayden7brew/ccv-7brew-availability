@@ -13,17 +13,24 @@
 <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="weekly">
 <div class="form-step"><span>1</span><h2>When should these hours start?</h2></div><label class="start-date">Start date<input type="date" name="effective_date" id="effective-date" min="{{ earliest }}" max="{{ latest }}" value="{{ effective_date }}" aria-describedby="weekly-feedback" required></label>
 <p class="muted">Your current approved hours continue until this date. {% if direct %}Your new hours are saved without another manager’s approval.{% else %}Submitting a request does not change them; manager approval is required.{% endif %}</p>
-<div class="form-step"><span>2</span><h2>Set your unavailable hours</h2></div><p class="muted">Select when you cannot work each day. All-day options apply to the whole day.</p><div class="weekly-editor">
+<div class="form-step"><span>2</span><h2>Set your unavailable hours</h2></div><p class="muted">Select when you cannot work each day. Add another period if you have separate unavailable hours on the same day. All-day options apply to the whole day.</p><div class="weekly-editor">
 {% for i in [1,2,3,4,5,6,0] %}{% set day = days[i] %}{% set hours = defaults[i] %}
 <fieldset class="day-row" data-day="{{ day }}"><legend>{{ day }}</legend>
 <label>Availability<select name="day_{{ i }}_mode" aria-label="{{ day }} availability">{% if hours.mode == 'hours' %}<option value="hours" selected>Previously entered available hours</option>{% endif %}<option value="unavailable" {% if hours.mode == 'unavailable' %}selected{% endif %}>Enter unavailable hours</option><option value="all_day" {% if hours.mode == 'all_day' %}selected{% endif %}>I’m available all day</option><option value="none" {% if hours.mode == 'none' %}selected{% endif %}>I’m unavailable all day</option></select></label>
-{% for field, label in [('start', 'From'), ('end', 'To')] %}
-<label>{{ label }}<select name="day_{{ i }}_{{ field }}" aria-label="{{ day }} unavailable {{ label|lower }}" aria-describedby="day-{{ i }}-error">
+<div class="day-periods">
+{% for period in hours.ranges or [hours] %}
+<div class="unavailable-period">
+{% for field, label in [('start', 'Unavailable from'), ('end', 'To')] %}
+<label>{{ label }}<select name="day_{{ i }}_{{ field }}" aria-label="{{ day }} {{ 'unavailable from' if field == 'start' else 'unavailable to' }}" aria-describedby="day-{{ i }}-error">
 <option value="">Choose time</option>
 {% for minute in range(300, 1381, 15) %}{% set hour = minute // 60 %}{% set value = '%02d:%02d'|format(hour, minute % 60) %}
-<option value="{{ value }}" {% if hours[field] == value %}selected{% endif %}>{{ hour % 12 or 12 }}:{{ '%02d'|format(minute % 60) }} {{ 'AM' if hour < 12 else 'PM' }}</option>
+<option value="{{ value }}" {% if period[field] == value %}selected{% endif %}>{{ hour % 12 or 12 }}:{{ '%02d'|format(minute % 60) }} {{ 'AM' if hour < 12 else 'PM' }}</option>
 {% endfor %}</select></label>
 {% endfor %}
+<button type="button" class="quiet remove-period" aria-label="Remove unavailable period for {{ day }}">Remove</button>
+</div>{% endfor %}
+<button type="button" class="quiet add-period">+ Add another unavailable period</button>
+</div>
 <p class="day-error error" id="day-{{ i }}-error" hidden></p></fieldset>{% endfor %}</div>
 <p class="muted">From/To specify when you cannot work when “Enter unavailable hours” is selected. Times use {{ cfg.business_timezone }}. Choose times from 5:00 AM to 11:00 PM in 15-minute steps, with To later than From. The remaining hours are treated as available.</p>
 <div class="form-step"><span>3</span><h2>{{ 'Save availability' if direct else 'Send for approval' }}</h2></div><label>{{ 'Note (optional)' if direct else 'Anything your manager should know? (optional)' }}<textarea name="employee_note" maxlength="2000" rows="3">{{ employee_note }}</textarea></label>

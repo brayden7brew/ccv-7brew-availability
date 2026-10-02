@@ -35,9 +35,10 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=cfg.allowed_hosts.split(
 root = Path(__file__).parent
 app.mount('/static', StaticFiles(directory=root/'static'), name='static')
 templates = Jinja2Templates(directory=root/'templates')
-from .weekly import week_totals, working_hour_labels
+from .weekly import week_totals, working_hour_labels, unavailable_hour_labels
 templates.env.globals['week_totals'] = week_totals
 templates.env.globals['working_hour_labels'] = working_hour_labels
+templates.env.globals['unavailable_hour_labels'] = unavailable_hour_labels
 from .availability_rules import counted_minutes
 from .presentation import clock_label, date_label, local_datetime
 templates.env.globals['counted_minutes'] = counted_minutes
@@ -248,13 +249,21 @@ def weekly_form(request, db, user, defaults, *, effective_date='', employee_note
 @app.post('/requests')
 async def submit(request: Request, db=Depends(get_db)):
     user = current_user(request, db)
-    form = await request.form(max_fields=40)
+    form = await request.form(max_fields=100)
     csrf(request, form.get('csrf'))
     if form.get('action') != 'weekly':
         raise HTTPException(422, 'Use the new weekly availability form.')
     note = str(form.get('employee_note', '')).strip()
-    days = [{'mode':str(form.get(f'day_{i}_mode','none')), 'start':str(form.get(f'day_{i}_start','')),
-             'end':str(form.get(f'day_{i}_end',''))} for i in range(7)]
+    days = []
+    for i in range(7):
+        mode = str(form.get(f'day_{i}_mode', 'none'))
+        starts = [str(v) for v in form.getlist(f'day_{i}_start')]
+        ends = [str(v) for v in form.getlist(f'day_{i}_end')]
+        day = dict(mode=mode, start=starts[0] if starts else '', end=ends[0] if ends else '')
+        if mode == 'unavailable' and max(len(starts), len(ends)) > 1:
+            day.update(start='', end='', ranges=[dict(start=starts[j] if j < len(starts) else '',
+                end=ends[j] if j < len(ends) else '') for j in range(max(len(starts), len(ends)))])
+        days.append(day)
     effective_date = str(form.get('effective_date', ''))
 
     def invalid(message, status_code=422):
@@ -270,7 +279,7 @@ async def submit(request: Request, db=Depends(get_db)):
         return invalid('; '.join(e['msg'].removeprefix('Value error, ') for e in exc.errors()))
     allowed_times = {f'{m//60:02d}:{m%60:02d}' for m in range(300,1381,15)}
     for i, day in enumerate(data.days):
-        if day.mode in ('hours', 'unavailable') and any(value not in allowed_times for value in (day.start,day.end)):
+        if day.mode in ('hours', 'unavailable') and not day.ranges and any(value not in allowed_times for value in (day.start,day.end)):
             return invalid(f'{DAYS[i]}: choose times between 5:00 AM and 11:00 PM in 15-minute steps.')
     # Serialize capture against approval of another schedule for this employee.
     db.scalar(select(User).where(User.id == user.id).with_for_update().execution_options(populate_existing=True))

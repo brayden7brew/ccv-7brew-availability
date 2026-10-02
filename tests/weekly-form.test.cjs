@@ -19,8 +19,9 @@ function page(minimum = 900, blocked = false) {
       const minutes=300+n*15;
       return element(`${String(Math.floor(minutes/60)).padStart(2,'0')}:${String(minutes%60).padStart(2,'0')}`);
     })];
-    return {fields, dataset:{day:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][i]},
-      querySelector(selector) { return fields[selector === '.day-error' ? 'error' : selector.match(/_(mode|start|end)/)[1]]; }};
+    const period = {setAttribute() {}, querySelector(selector) { return selector === '.remove-period' ? element() : fields[selector.match(/_(start|end)/)[1]]; }, querySelectorAll() { return [fields.start, fields.end]; }};
+    return {fields, periods:[period], querySelectorAll() { return this.periods; }, dataset:{day:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][i]},
+      querySelector(selector) { if (selector === '.add-period') return element(); return fields[selector === '.day-error' ? 'error' : selector.match(/_(mode|start|end)/)[1]]; }};
   });
   const form = {dataset:{minimumMinutes:String(minimum),limitBlocked:String(blocked)},
     elements:{namedItem(name) { return name === 'effective_date' ? date : note; }},
@@ -106,4 +107,15 @@ test('unavailable hours count the remaining operating hours with the daily cap',
   row.start.value='10:00'; p.change();
   assert.match(p.credit.textContent,/20 of 15/);
   row.end.value=''; p.change(); assert.equal(p.button.disabled,true);
+});
+
+ test('split unavailable periods subtract every period and reject overlap', () => {
+  const p=page(0); p.date.value=p.date.min;
+  const row=p.rows[0]; row.fields.mode.value='unavailable';
+  row.fields.start.value='05:00'; row.fields.end.value='09:30';
+  const start=element('17:00'), end=element('22:00'); end.options=row.fields.end.options;
+  row.periods.push({setAttribute() {}, querySelector(s) { return s === '.remove-period' ? element() : s.includes('_start') ? start : end; }, querySelectorAll() { return [start,end]; }});
+  p.change(); assert.match(p.credit.textContent,/8.5 hours counted/); assert.equal(p.button.disabled,false);
+  start.value='09:15'; p.change(); assert.equal(p.button.disabled,true); assert.match(row.fields.error.textContent,/overlap/);
+  start.value='09:30'; p.change(); assert.equal(p.button.disabled,false); assert.match(p.credit.textContent,/1 hours counted/);
 });
