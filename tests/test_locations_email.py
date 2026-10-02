@@ -20,7 +20,7 @@ def test_only_primary_manager_can_see_and_decide(client,db):
     submit(client)
     sign_in(client,'other@test.local')
     assert client.get('/requests/1').status_code==404
-    assert '/requests/1' not in client.get('/').text
+    assert '/requests/1' not in client.get('/requests').text
     with pytest.raises(HTTPException): decide(db,db.get(User,3),1,'approve','',Fake())
     decide(db,db.get(User,2),1,'approve','',Fake())
 

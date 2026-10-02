@@ -6,6 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
     database_url: str = 'sqlite:///./portal.db'
+    ops_backend_url: str = ''
+    ops_integration_key: str = ''
     secret_key: str
     environment: str = 'development'
     allowed_hosts: str = 'localhost,127.0.0.1,testserver'
@@ -39,6 +41,13 @@ class Settings(BaseSettings):
     @model_validator(mode='after')
     def validate_settings(self):
         ZoneInfo(self.business_timezone)
+        if self.ops_backend_url:
+            from urllib.parse import urlsplit
+            url = urlsplit(self.ops_backend_url)
+            if url.scheme != 'https' or not url.hostname or url.username or url.password or url.query or url.fragment or url.path not in ('', '/'):
+                raise ValueError('OPS_BACKEND_URL must be an HTTPS origin')
+            if len(self.ops_integration_key) < 32:
+                raise ValueError('OPS_INTEGRATION_KEY must contain at least 32 random characters')
         if self.email_enabled:
             from urllib.parse import urlsplit
             url = urlsplit(self.public_base_url)

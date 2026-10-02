@@ -28,6 +28,8 @@ def current_user(request, db):
     user = db.get(User, session.user_id)
     if not user or not user.active:
         raise HTTPException(401, 'Account disabled.')
+    if (request.url.path == '/availability' or request.url.path.startswith('/requests')) and not (user.availability_access or user.role == 'admin'):
+        raise HTTPException(403, 'Availability access is not enabled for your account.')
     return user
 
 def login(request, db, user, *, remember=False):

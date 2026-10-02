@@ -56,7 +56,7 @@ def test_form_script_is_local_and_disabled_until_validated(client):
     assert '<script src="/static/weekly-form.js" defer>' in response.text
     assert "script-src 'self'" in response.headers['content-security-policy']
     assert 'unsafe-inline' not in response.headers['content-security-policy']
-    assert "script-src 'none'" in client.get('/').headers['content-security-policy']
+    assert "script-src 'self'" in client.get('/').headers['content-security-policy']
 
 
 def test_wiw_diagnostics_report_codes_without_credentials_or_upstream_text(client,db,monkeypatch,caplog):

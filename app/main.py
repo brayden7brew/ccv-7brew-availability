@@ -28,7 +28,7 @@ from .workflow import allowed, audit, decide
 logger = logging.getLogger(__name__)
 
 cfg = settings()
-app = FastAPI(title='CCV 7 Brew Availability', docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(title='CCV 7 Brew Portal', docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(DeviceSessionMiddleware, secret_key=cfg.secret_key, session_cookie='portal_session',
     normal_max_age=cfg.session_hours * 3600, same_site='lax', https_only=cfg.secure_cookies)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=cfg.allowed_hosts.split(','))
@@ -47,12 +47,13 @@ from .portal_setup import router as portal_setup_router
 app.include_router(portal_setup_router)
 from .webhooks import router as webhook_router
 app.include_router(webhook_router)
+from .hub import router as hub_router
+app.include_router(hub_router)
 
 @app.middleware('http')
 async def headers(request, call_next):
     response = await call_next(request)
-    script_source = "'self'" if (request.url.path in ('/requests/new', '/requests')
-        or re.fullmatch(r'/requests/[0-9]+', request.url.path)) else "'none'"
+    script_source = "'self'"
     response.headers.update({'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY',
         'Referrer-Policy': 'same-origin', 'Cache-Control': 'no-store',
         'Content-Security-Policy': f"default-src 'self'; style-src 'self'; script-src {script_source}; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
@@ -67,6 +68,9 @@ def page(request, name, status_code=200, **context):
 
 @app.exception_handler(HTTPException)
 async def http_error(request, exc):
+    if request.url.path.startswith('/ops/api/'):
+        from fastapi.responses import JSONResponse
+        return JSONResponse({'detail': exc.detail}, status_code=exc.status_code)
     if exc.status_code == 401:
         return RedirectResponse('/login', status_code=303)
     return templates.TemplateResponse(request=request, name='error.html',
@@ -174,7 +178,7 @@ async def logout(request: Request, db=Depends(get_db)):
     request.session.clear()
     return RedirectResponse('/login', 303)
 
-@app.get('/')
+@app.get('/requests')
 def dashboard(request: Request, page_number: int = 1, db=Depends(get_db)):
     user = current_user(request, db)
     if page_number < 1 or page_number > 100000: raise HTTPException(422, 'Invalid page.')

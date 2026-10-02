@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block head %}<link rel="stylesheet" href="/static/ops/ops.css">{% endblock %}
+{% block title %}{{ stand_name }} · RVA 7 Brew Ops{% endblock %}
+{% block content %}<div class="ops-module">
+<section class="stand-detail-page" data-stand-slug="{{ stand_slug }}">
+  <a class="back-link" href="/ops">← All stands</a>
+  <header class="portal-hero detail-hero"><p class="eyebrow">Stand Details</p><h1>{{ stand_name }}</h1><p>Live performance and today’s shift history.</p></header>
+  <div id="detailNotice" class="labor-notice">Loading stand data…</div>
+  <section id="detailMetrics" class="detail-metrics"></section>
+  <section class="detail-section"><h2>Wait-time history</h2><div id="waitHistory" class="history-grid"></div></section>
+  <section class="detail-section"><h2>Labor history</h2><div id="laborHistory" class="history-grid"></div></section>
+</section>
+</div>{% endblock %}
+{% block scripts %}<script src="/static/ops/stand.js" defer></script>{% endblock %}

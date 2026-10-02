@@ -124,7 +124,7 @@ def test_rate_limit(client):
 
 def test_headers_and_host(client):
     r = client.get('/login')
-    assert "script-src 'none'" in r.headers['content-security-policy']
+    assert "script-src 'self'" in r.headers['content-security-policy']
     assert 'httponly' in r.headers['set-cookie'].lower()
     assert client.get('/login',headers={'host':'evil.example'}).status_code == 400
 

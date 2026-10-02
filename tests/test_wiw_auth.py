@@ -64,7 +64,7 @@ def test_real_wiw_email_maps_by_id_and_preserves_permissions(client,db,monkeypat
     old_hash=db.get(User,1).password_hash
     csrf=token(client.get('/login/wiw'))
     response=client.post('/login/wiw',data={'csrf':csrf,'email':'actual-wiw@example.com','password':'do-not-store-this'})
-    assert response.status_code==200 and 'Hello, employee' in response.text
+    assert response.status_code==200 and 'Hi, employee.' in response.text
     assert db.get(User,1).role=='employee' and db.get(User,1).password_hash==old_hash
     assert db.get(User,1).email=='employee@test.local'
     assert db.scalar(select(LoginSession)).user_id==1
@@ -76,7 +76,7 @@ def test_manager_permissions_preserved(client,db,monkeypatch,auth_config):
     monkeypatch.setattr(WIWAuth,'authenticate',lambda self,email,password:2)
     csrf=token(client.get('/login/wiw'))
     response=client.post('/login/wiw',data={'csrf':csrf,'email':'actual-manager@example.com','password':'test'})
-    assert 'TEAM AVAILABILITY' in response.text.upper()
+    assert 'MANAGE REQUESTS' in response.text.upper()
     assert db.get(User,2).role=='manager'
 
 @pytest.mark.parametrize('local_state',['disabled','unprovisioned'])

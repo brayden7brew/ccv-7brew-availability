@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block head %}<link rel="stylesheet" href="/static/ops/ops.css">{% endblock %}
+{% block title %}Dashboard · RVA 7 Brew Ops{% endblock %}
+{% block content %}<div class="ops-module">
+<section class="overview-page">
+  <header class="portal-hero overview-hero">
+    <p class="eyebrow">Live Operations</p><h1>Dashboard</h1>
+    <p>Current wait time, labor, gross sales, and staffing across your permitted stands.</p>
+    <time id="easternClock" class="eastern-clock" aria-live="off">Loading Eastern time…</time>
+  </header>
+  <div id="overviewNotice" class="labor-notice">Loading current stand data…</div>
+  <section id="standGrid" class="stand-overview-grid" aria-live="polite"></section>
+</section>
+</div>{% endblock %}
+{% block scripts %}<script src="/static/ops/dashboard.js" defer></script>{% endblock %}
