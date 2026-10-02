@@ -202,6 +202,9 @@ def date_range(start=None, end=None):
 @app.get('/availability')
 def availability(request: Request, db=Depends(get_db)):
     user = current_user(request, db)
+    return page(request, 'availability.html', user=user, **availability_context(request, db, user))
+
+def availability_context(request, db, user):
     rows = timeline(db, user.id, cfg.dry_run)
     today = local_today()
     current = next((r for r in reversed(rows) if r.effective_date <= today), None)
@@ -212,7 +215,7 @@ def availability(request: Request, db=Depends(get_db)):
         if abs((selected-today).days) > 366: raise ValueError()
     except ValueError:
         raise HTTPException(422, 'Choose a week within one year of today.') from None
-    week = selected - timedelta(days=(selected.weekday()+1)%7)
+    week = selected - timedelta(days=selected.weekday())
     first, last = date_range(week.isoformat(), (week+timedelta(days=7)).isoformat())
     calendar = None
     try:
@@ -220,7 +223,7 @@ def availability(request: Request, db=Depends(get_db)):
         calendar = preview(state['availabilityevents'], week)
     except (WIWError, ValueError, KeyError, TypeError, OverflowError):
         logger.warning('Availability calendar could not be loaded')
-    return page(request, 'availability.html', user=user, days=DAYS,
+    return dict(days=DAYS,
         current=display_schedule(current), upcoming=[display_schedule(r) for r in upcoming],
         calendar=calendar, today=today, week=week, week_end=week+timedelta(days=6),
         previous_week=week-timedelta(days=7), next_week=week+timedelta(days=7),
@@ -230,8 +233,7 @@ def availability(request: Request, db=Depends(get_db)):
 @app.get('/requests/new')
 def new(request: Request, db=Depends(get_db)):
     user = current_user(request, db)
-    rows = timeline(db, user.id, cfg.dry_run)
-    defaults = rows[-1].days if rows else [{'mode':'none','start':'','end':''} for _ in DAYS]
+    defaults = [{'mode':'none','start':'','end':''} for _ in DAYS]
     return weekly_form(request, db, user, defaults)
 
 
@@ -267,7 +269,7 @@ async def submit(request: Request, db=Depends(get_db)):
         return invalid('; '.join(e['msg'].removeprefix('Value error, ') for e in exc.errors()))
     allowed_times = {f'{m//60:02d}:{m%60:02d}' for m in range(300,1381,15)}
     for i, day in enumerate(data.days):
-        if day.mode == 'hours' and any(value not in allowed_times for value in (day.start,day.end)):
+        if day.mode in ('hours', 'unavailable') and any(value not in allowed_times for value in (day.start,day.end)):
             return invalid(f'{DAYS[i]}: choose times between 5:00 AM and 11:00 PM in 15-minute steps.')
     # Serialize capture against approval of another schedule for this employee.
     db.scalar(select(User).where(User.id == user.id).with_for_update().execution_options(populate_existing=True))

@@ -8,7 +8,7 @@ from app import hub
 def test_home_only_shows_granted_tools(client, db):
     sign_in(client)
     response = client.get('/')
-    assert 'My Availability' in response.text
+    assert 'My current availability' in response.text
     assert 'Ops Dashboard' not in response.text
     assert client.get('/ops').status_code == 403
     assert client.get('/ops/api/dashboard').status_code == 403
@@ -59,7 +59,7 @@ def test_admin_modules_csrf_audit_and_revocation(client, db):
     assert client.get('/requests').status_code == 403
     assert client.get('/requests/new').status_code == 403
     assert client.post('/requests',data={}).status_code == 403
-    assert 'My Availability' not in client.get('/').text
+    assert 'My current availability' not in client.get('/').text
     assert 'Ops Dashboard' in client.get('/').text
 
 

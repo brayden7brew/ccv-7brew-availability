@@ -25,7 +25,7 @@ services:
       - key: SECURE_COOKIES
         value: 'true'
       - key: DRY_RUN
-        value: 'true'
+        value: 'false'
       - key: WIW_MODE
         value: live
       - key: ALLOWED_HOSTS

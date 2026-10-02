@@ -3,15 +3,15 @@ from datetime import timedelta
 from sqlalchemy import select
 from fastapi import HTTPException
 from .models import Change
-from .weekly import local_today, minutes, end_minutes
+from .weekly import local_today, blocked
 
 
 def counted_minutes(days):
-    total=0
+    total = 0
     for day in days:
-        if day['mode']=='all_day': total+=10*60
-        elif day['mode']=='hours':
-            total+=min(10*60,max(0,min(end_minutes(day['end']),23*60)-max(minutes(day['start']),5*60)))
+        unavailable = sum(max(0, min(end, 1380) - max(start, 300))
+                          for start, end in blocked(day))
+        total += min(600, 1080 - unavailable)
     return total
 
 

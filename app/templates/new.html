@@ -2,29 +2,30 @@
 {% if days is not defined %}
 <section class="card"><h1>This form is temporarily unavailable.</h1><p>Please refresh the page in a moment. If the problem continues, contact your administrator.</p></section>
 {% else %}
-<p class="eyebrow">YOUR REPEATING WORK WEEK</p><h1>When can you work?</h1>
-<p>Enter the hours you <strong>are available</strong> for each day. This Sunday–Saturday pattern repeats every week until a newer approved schedule starts.</p>
+<p class="eyebrow">YOUR REPEATING WORK WEEK</p><h1>When are you unavailable?</h1>
+{% include 'availability_description.html' %}
+<p>Enter the hours you <strong>cannot work</strong>. Every day starts as unavailable; change each day to match your normal week.</p>
 {% include 'request_usage.html' %}
-<section class="banner"><strong>Your availability requirements</strong><p>{% if rules.minimum_enabled %}At least {{ '%g'|format(rules.minimum_hours) }} hours per week between 5 a.m. and 11 p.m. ({{ cfg.business_timezone }}). At most 10 hours per day count toward the minimum, including all-day availability. Hours outside this window do not count.{% else %}No weekly minimum applies.{% endif %}</p><p>{% if rules.first_request_exception %}Welcome! Your first submission may start tomorrow. After that, {{ rules.notice_days }} days’ notice applies.{% elif rules.notice_enabled %}Submit at least {{ rules.notice_days }} days before your start date.{% else %}Advance notice is turned off. You can start as soon as tomorrow.{% endif %}</p></section>
+<section class="banner"><strong>Your availability requirements</strong><p>{% if rules.minimum_enabled %}Please note you must be able to work a minimum of {{ '%g'|format(rules.minimum_hours) }} hours a week.{% else %}No weekly minimum applies.{% endif %}</p><p>{% if rules.first_request_exception %}Your first submission may start tomorrow. After that, {{ rules.notice_days }} days’ notice applies.{% elif rules.notice_enabled %}Submit at least {{ rules.notice_days }} days before your start date.{% else %}Advance notice is turned off. You can start as soon as tomorrow.{% endif %}</p></section>
 <form method="post" action="/requests" class="card weekly-form" id="weekly-form" data-minimum-minutes="{{ rules.minimum_minutes if rules.minimum_enabled else 0 }}" data-limit-blocked="{{ 'true' if usage.blocked else 'false' }}">
 {% if form_error %}<p class="error" role="alert">{{ form_error }}</p>{% endif %}
 <noscript><p class="error">Enable JavaScript to check your hours and submit this form. Your entries must meet the requirements shown above.</p></noscript>
 <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="weekly">
 <div class="form-step"><span>1</span><h2>When should these hours start?</h2></div><label class="start-date">Start date<input type="date" name="effective_date" id="effective-date" min="{{ earliest }}" max="{{ latest }}" value="{{ effective_date }}" aria-describedby="weekly-feedback" required></label>
 <p class="muted">Your current approved hours continue until this date. {% if direct %}Your new hours are saved without another manager’s approval.{% else %}Submitting a request does not change them; manager approval is required.{% endif %}</p>
-<div class="form-step"><span>2</span><h2>Set your available hours</h2></div><p class="muted">Choose hours, all day, or no hours for each day below.</p><div class="weekly-editor">
-{% for day in days %}{% set i = loop.index0 %}{% set hours = defaults[i] %}
+<div class="form-step"><span>2</span><h2>Set your unavailable hours</h2></div><p class="muted">Select when you cannot work each day. All-day options apply to the whole day.</p><div class="weekly-editor">
+{% for i in [1,2,3,4,5,6,0] %}{% set day = days[i] %}{% set hours = defaults[i] %}
 <fieldset class="day-row" data-day="{{ day }}"><legend>{{ day }}</legend>
-<label>Availability<select name="day_{{ i }}_mode" aria-label="{{ day }} availability"><option value="hours" {% if hours.mode == 'hours' %}selected{% endif %}>Enter hours</option><option value="all_day" {% if hours.mode == 'all_day' %}selected{% endif %}>Available all day</option><option value="none" {% if hours.mode == 'none' %}selected{% endif %}>No hours this day</option></select></label>
+<label>Availability<select name="day_{{ i }}_mode" aria-label="{{ day }} availability">{% if hours.mode == 'hours' %}<option value="hours" selected>Previously entered available hours</option>{% endif %}<option value="unavailable" {% if hours.mode == 'unavailable' %}selected{% endif %}>Enter unavailable hours</option><option value="all_day" {% if hours.mode == 'all_day' %}selected{% endif %}>I’m available all day</option><option value="none" {% if hours.mode == 'none' %}selected{% endif %}>I’m unavailable all day</option></select></label>
 {% for field, label in [('start', 'From'), ('end', 'To')] %}
-<label>{{ label }}<select name="day_{{ i }}_{{ field }}" aria-label="{{ day }} available {{ label|lower }}" aria-describedby="day-{{ i }}-error">
+<label>{{ label }}<select name="day_{{ i }}_{{ field }}" aria-label="{{ day }} unavailable {{ label|lower }}" aria-describedby="day-{{ i }}-error">
 <option value="">Choose time</option>
 {% for minute in range(300, 1381, 15) %}{% set hour = minute // 60 %}{% set value = '%02d:%02d'|format(hour, minute % 60) %}
 <option value="{{ value }}" {% if hours[field] == value %}selected{% endif %}>{{ hour % 12 or 12 }}:{{ '%02d'|format(minute % 60) }} {{ 'AM' if hour < 12 else 'PM' }}</option>
 {% endfor %}</select></label>
 {% endfor %}
 <p class="day-error error" id="day-{{ i }}-error" hidden></p></fieldset>{% endfor %}</div>
-<p class="muted">From/To apply when “Enter hours” is selected. Times use {{ cfg.business_timezone }}. Choose times from 5:00 AM to 11:00 PM in 15-minute steps, with To later than From. “No hours” means you cannot work that day.</p>
+<p class="muted">From/To specify when you cannot work when “Enter unavailable hours” is selected. Times use {{ cfg.business_timezone }}. Choose times from 5:00 AM to 11:00 PM in 15-minute steps, with To later than From. The remaining hours are treated as available.</p>
 <div class="form-step"><span>3</span><h2>{{ 'Save availability' if direct else 'Send for approval' }}</h2></div><label>{{ 'Note (optional)' if direct else 'Anything your manager should know? (optional)' }}<textarea name="employee_note" maxlength="2000" rows="3">{{ employee_note }}</textarea></label>
 <div id="weekly-feedback" class="validation-feedback" aria-live="polite" aria-atomic="true"><p id="weekly-credit"></p><p id="weekly-errors">Choose a start date and enter your availability to continue.</p></div>
 <div class="form-actions"><button id="weekly-submit" disabled>{{ "Request limit reached" if usage.blocked else ("Save my availability" if direct else "Send to my manager") }}</button><a href="/availability">Cancel</a></div><p class="muted">{% if direct %}No additional approval is required. Your new hours start on the selected date.{% else %}Your hours change only after your manager approves.{% endif %}</p>

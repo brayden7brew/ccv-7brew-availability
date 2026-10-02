@@ -16,8 +16,8 @@ def form(client):
 
 def test_insufficient_hours_keep_form_values_and_do_not_read_wiw(client,db,monkeypatch):
     def unexpected(): raise AssertionError('Invalid form must not call WIW')
-    monkeypatch.setattr('app.main.WIW',unexpected)
     values=form(client)
+    monkeypatch.setattr('app.main.WIW',unexpected)
     response=client.post('/requests',data=values)
     assert response.status_code==422
     assert 'id="weekly-form"' in response.text and 'We couldn’t complete that' not in response.text

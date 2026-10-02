@@ -1,0 +1,15 @@
+<section class="card availability-calendar" aria-labelledby="calendar-heading">
+<div class="calendar-toolbar"><div><h2 id="calendar-heading">{{ week.strftime('%b %-d') }} – {{ week_end.strftime('%b %-d, %Y') }}</h2><p class="muted">Hours in When I Work · {{ cfg.business_timezone }}</p></div><nav aria-label="Choose availability week">{% if can_previous %}<a class="button quiet" href="/availability?week={{ previous_week }}" aria-label="Previous week">←</a>{% endif %}<a class="button quiet" href="/availability">This week</a>{% if can_next %}<a class="button quiet" href="/availability?week={{ next_week }}" aria-label="Next week">→</a>{% endif %}</nav></div>
+<p class="calendar-legend"><span class="availability-dot" aria-hidden="true"></span> Available to work <span class="muted">· 5 AM–11 PM · These are availability hours, not scheduled shifts.</span></p>
+{% if calendar is none %}<p class="error" role="alert">We couldn’t load your hours from When I Work. Refresh this page to try again.</p>
+{% else %}
+<div class="calendar-week">
+<div class="calendar-axis" aria-hidden="true"><div class="calendar-day-heading"></div><div class="calendar-track">{% for hour in [5,8,11,14,17,20,23] %}<span>{{ hour % 12 or 12 }} {{ 'AM' if hour < 12 else 'PM' }}</span>{% endfor %}</div></div>
+{% for day in calendar %}<article class="calendar-day {% if day.date == today %}calendar-today{% endif %}" aria-label="{{ day.date.strftime('%A, %B %-d') }}">
+<div class="calendar-day-heading"><span>{{ day.date.strftime('%a') }}</span><strong>{{ day.date.day }}</strong>{% if day.date == today %}<small>Today</small>{% endif %}</div>
+<div class="calendar-track" aria-hidden="true"><svg class="calendar-windows" viewBox="0 0 100 100" preserveAspectRatio="none">{% for window in day.windows %}<rect class="availability-block" x="4" y="{{ window.top }}" width="92" height="{{ window.height }}" rx="2" vector-effect="non-scaling-stroke"><title>{{ window.label }}</title></rect>{% endfor %}</svg></div>
+<div class="calendar-day-hours">{% for window in day.windows %}<span>{{ window.label }}</span>{% else %}<span class="muted">Not available</span>{% endfor %}</div>
+</article>{% endfor %}
+</div>
+<p class="muted calendar-help">Green shows hours without an unavailable preference in When I Work. Preferred hours do not limit your availability. Pending requests aren’t shown here.</p>
+{% endif %}</section>

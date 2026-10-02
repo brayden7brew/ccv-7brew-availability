@@ -70,10 +70,13 @@ def test_next_approval_replaces_same_start_date(client,db):
     assert [r.change_id for r in timeline(db,1,True)]==[2]
     assert len(db.scalars(select(WeeklySchedule)).all())==2
 
-def test_form_is_sunday_to_saturday_positive_hours_only(client):
+def test_form_is_monday_to_sunday_unavailable_hours(client):
     sign_in(client)
     html=client.get('/requests/new').text
-    assert html.index('Sunday</legend>')<html.index('Saturday</legend>')
+    assert html.index('Monday</legend>') < html.index('Saturday</legend>') < html.index('Sunday</legend>')
+    assert html.count('selected>No hours this day') == 0
+    assert html.count('selected>I’m unavailable all day') == 7
+    assert 'Enter unavailable hours' in html
     assert 'name="effective_date"' in html
     for removed in ['name="end_time"','name="end_date"','name="type"','name="weeks"','Preferred</option>','Unavailable</option>']:
         assert removed not in html

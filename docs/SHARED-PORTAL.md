@@ -60,3 +60,15 @@ Availability suite: 199 passed, one database-specific test skipped locally.
 Browser scripts: 9 passed. Ops suite: 33 passed.
 Desktop and 390px mobile layouts inspected with a local preview using synthetic data.
 Production connection must be checked after the two matching secrets are configured.
+
+## Weekly availability entry
+
+Employee Home shows the change button followed by the current WIW calendar. Weeks
+are displayed Monday–Sunday. New requests start with all seven days unavailable,
+and timed entries specify unavailable hours. Existing saved available-hours entries
+retain their meaning and weekday mapping; no data migration or automatic WIW write
+is performed. Minimum credit counts the remaining 5 AM–11 PM availability, capped
+at ten hours per day. Temporary absences should use WIW time off.
+
+The Home Screen installation prompt is currently removed. Production Render uses
+`WIW_MODE=live` and `DRY_RUN=false`; local defaults remain safe for development.

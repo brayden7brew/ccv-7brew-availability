@@ -93,3 +93,17 @@ test('To choices must follow From and reset when From catches up', () => {
   assert.equal(row.end.value,'');
   assert.equal(row.end.options.filter(o=>o.value && !o.disabled).length,0);
 });
+
+test('unavailable hours count the remaining operating hours with the daily cap', () => {
+  const p=page(); p.date.value=p.date.min;
+  const row=p.rows[0].fields;
+  row.mode.value='unavailable'; row.start.value='05:00'; row.end.value='23:00'; p.change();
+  assert.match(p.credit.textContent,/0 of 15/); assert.equal(p.button.disabled,true);
+  row.end.value='18:00'; p.change();
+  assert.match(p.credit.textContent,/5 of 15/);
+  p.rows[1].fields.mode.value='all_day'; p.change();
+  assert.match(p.credit.textContent,/15 of 15/); assert.equal(p.button.disabled,false);
+  row.start.value='10:00'; p.change();
+  assert.match(p.credit.textContent,/20 of 15/);
+  row.end.value=''; p.change(); assert.equal(p.button.disabled,true);
+});

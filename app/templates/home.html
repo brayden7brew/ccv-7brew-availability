@@ -1,8 +1,13 @@
 {% extends 'base.html' %}{% block content %}
 <div class="heading"><div><p class="eyebrow">CCV 7 BREW</p><h1>Hi, {{ user.name.split()[0] }}.</h1><p>Your tools, all in one place.</p></div></div>
+{% if user.availability_access or user.role == 'admin' %}
+<a class="button home-availability-action" href="/requests/new">Change my availability <span aria-hidden="true">→</span></a>
+<h2>My current availability</h2>
+{% include 'availability_description.html' %}
+{% include 'availability_calendar.html' %}
+{% endif %}
 <section class="hub-grid" aria-label="Your tools">
 {% if user.availability_access or user.role == 'admin' %}
-<a class="hub-card" href="/availability"><span class="hub-icon" aria-hidden="true">◷</span><h2>My Availability</h2><p>See your hours and request a change.</p><span class="hub-open">Open availability →</span></a>
 <a class="hub-card" href="/requests"><span class="hub-icon" aria-hidden="true">✓</span><h2>{{ 'Manage Requests' if user.role in ('manager','admin') else 'My Requests' }}</h2><p>{{ 'Review requests for your approval locations and track your own.' if user.role in ('manager','admin') else 'Track approvals and view your previous requests.' }}</p><span class="hub-open">View requests →</span></a>
 {% endif %}
 {% if has_ops %}<a class="hub-card" href="/ops"><span class="hub-icon" aria-hidden="true">▥</span><h2>Ops Dashboard</h2><p>Wait times, sales, labor and stand performance.</p><span class="hub-open">Open dashboard →</span></a>{% endif %}

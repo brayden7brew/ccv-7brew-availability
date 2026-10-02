@@ -1,4 +1,9 @@
-"""Positive Sunday–Saturday availability and deterministic WIW recurrence planning."""
+"""Weekly availability and deterministic WIW recurrence planning.
+
+Stored days remain Sunday–Saturday for backward compatibility. The UI presents
+Monday–Sunday; new timed entries specify unavailable hours, while historical
+"hours" entries retain their original available-hours meaning.
+"""
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Literal
@@ -11,13 +16,13 @@ DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satur
 
 class DayHours(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    mode: Literal['hours', 'all_day', 'none'] = 'none'
+    mode: Literal['hours', 'unavailable', 'all_day', 'none'] = 'none'
     start: str = ''
     end: str = ''
 
     @model_validator(mode='after')
     def valid(self):
-        if self.mode != 'hours':
+        if self.mode not in ('hours', 'unavailable'):
             self.start = self.end = ''
             return self
         try:
@@ -79,6 +84,7 @@ def blocked(day):
     if day['mode'] == 'all_day': return []
     if day['mode'] == 'none': return [(0, 1440)]
     start, end = minutes(day['start']), end_minutes(day['end'])
+    if day['mode'] == 'unavailable': return [(start, end)]
     return [(a,b) for a,b in [(0,start),(end,1440)] if a < b]
 
 def event_plan(profiles, today=None):

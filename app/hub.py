@@ -34,9 +34,10 @@ def ops_user(request, db):
 
 @router.get('/')
 def home(request: Request, db=Depends(get_db)):
-    from .main import page
+    from .main import page, availability_context
     user = current_user(request, db)
-    return page(request, 'home.html', user=user, has_ops=bool(permitted_stands(user)))
+    context = availability_context(request, db, user) if user.availability_access or user.role == 'admin' else {}
+    return page(request, 'home.html', user=user, has_ops=bool(permitted_stands(user)), **context)
 
 
 @router.get('/ops')
