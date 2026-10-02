@@ -1,6 +1,7 @@
 {% extends 'base.html' %}{% from 'weekly_table.html' import week_table %}{% block content %}
 <p class="eyebrow">REQUEST #{{ change.id }} · {{ change.location }}{% if change.secondary_location %} / {{ change.secondary_location }}{% endif %}</p><h1>{{ employee.name }}’s weekly availability</h1>
-<span class="badge status-{{ change.status }}">{{ status_labels.get(change.status, change.status|replace('_',' ')) }}</span><p>{{ change.employee_note or 'No employee note.' }}</p>
+<span class="badge status-{{ change.status }}">{{ status_labels.get(change.status, change.status|replace('_',' ')) }}</span>
+<section class="card employee-comment" aria-labelledby="employee-comment-heading"><h2 id="employee-comment-heading">Employee’s comment to the manager</h2><p class="preserve-lines">{{ change.employee_note or 'No comment provided.' }}</p></section>
 {% if change.manager_note %}<section class="card"><h2>Message from your manager</h2><p class="preserve-lines">{{ change.manager_note }}</p></section>{% endif %}
 {% include 'request_usage.html' %}
 {% if change.status in ['needs_reconciliation','applying'] %}<div class="banner">Approval is recorded, but delivery is unconfirmed or incomplete. Contact your administrator to check the update before submitting another request.</div>{% endif %}

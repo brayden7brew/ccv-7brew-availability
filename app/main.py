@@ -35,8 +35,9 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=cfg.allowed_hosts.split(
 root = Path(__file__).parent
 app.mount('/static', StaticFiles(directory=root/'static'), name='static')
 templates = Jinja2Templates(directory=root/'templates')
-from .weekly import week_totals
+from .weekly import week_totals, working_hour_labels
 templates.env.globals['week_totals'] = week_totals
+templates.env.globals['working_hour_labels'] = working_hour_labels
 from .availability_rules import counted_minutes
 from .presentation import clock_label, date_label, local_datetime
 templates.env.globals['counted_minutes'] = counted_minutes

@@ -38,10 +38,10 @@ def test_admin_cannot_approve_other_location_or_move_pending_employee(client,db)
     assert db.get(Change,1).status=='pending'
 
 @pytest.mark.parametrize('days,expected', [
-    ([{'mode':'all_day'}]*7, ('168h','0h')),
-    ([{'mode':'none'}]*7, ('0h','168h')),
-    ([{'mode':'hours','start':'09:00','end':'17:30'}]*5+[{'mode':'none'}]*2, ('42h 30m','125h 30m')),
-    ([{'mode':'hours','start':'23:00','end':'00:00'}]*7, ('7h','161h')),
+    ([{'mode':'all_day'}]*7, ('126h','0h')),
+    ([{'mode':'none'}]*7, ('0h','126h')),
+    ([{'mode':'hours','start':'09:00','end':'17:30'}]*5+[{'mode':'none'}]*2, ('42h 30m','83h 30m')),
+    ([{'mode':'hours','start':'23:00','end':'00:00'}]*7, ('0h','126h')),
 ])
 def test_weekly_totals(days,expected):
     totals=week_totals({'days':days})

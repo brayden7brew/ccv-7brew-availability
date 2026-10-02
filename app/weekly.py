@@ -115,9 +115,30 @@ def event_plan(profiles, today=None):
     return result
 
 
+def working_windows(day):
+    """Available intervals clipped to the 5 AM–11 PM working period."""
+    cursor = 300
+    result = []
+    for start, end in sorted(blocked(day)):
+        start, end = max(300, start), min(1380, end)
+        if end <= start:
+            continue
+        if start > cursor:
+            result.append((cursor, start))
+        cursor = max(cursor, end)
+    if cursor < 1380:
+        result.append((cursor, 1380))
+    return result
+
+
+def working_hour_labels(day):
+    return [(f'{start//60:02d}:{start%60:02d}', f'{end//60:02d}:{end%60:02d}')
+            for start, end in working_windows(day)]
+
+
 def week_totals(schedule):
-    unavailable = sum(b-a for day in schedule['days'] for a,b in blocked(day))
+    available = sum(end-start for day in schedule['days'] for start, end in working_windows(day))
     def label(value):
         hours, mins = divmod(value, 60)
         return f'{hours}h' + (f' {mins}m' if mins else '')
-    return {'available':label(7*1440-unavailable), 'unavailable':label(unavailable)}
+    return {'available': label(available), 'unavailable': label(7*1080-available)}
