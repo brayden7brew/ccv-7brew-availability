@@ -32,3 +32,5 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .day-row{grid-template-columns:minmax(180px,1fr) minmax(0,2fr)}.day-periods{min-width:0}.unavailable-period{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:12px;align-items:end;margin-bottom:12px}.unavailable-period .remove-period{margin:0 0 2px;min-height:44px}.day-error{grid-column:1/-1}@media(max-width:700px){.day-row{grid-template-columns:1fr}.unavailable-period{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.unavailable-period .remove-period{grid-column:1/-1;justify-self:end}.add-period{width:100%}}
 
 .week-totals-period{flex-basis:100%;color:#52695e;font-size:.85rem}
+
+.start-step-heading{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}.start-step-heading small{font-size:.85rem}
