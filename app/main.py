@@ -316,8 +316,10 @@ async def submit(request: Request, db=Depends(get_db)):
     prior = next((r for r in reversed(rows) if r.effective_date <= data.effective_date), None)
     before.update(timeline_ids=timeline_ids(rows), schedule=display_schedule(prior), dry_run=cfg.dry_run)
     change = Change(employee_id=user.id, location=user.location, secondary_location=user.secondary_location, wiw_user_id=user.wiw_user_id,
-        action='weekly', proposed=data.model_dump(mode='json'), before=before,
+        action='weekly', request_limit_exempt=usage['use_credit'], proposed=data.model_dump(mode='json'), before=before,
         read_start=first, read_end=last, employee_note=note)
+    if usage['use_credit']:
+        user.extra_request_credits -= 1
     db.add(change)
     db.flush()
     user.first_request_notice_exception=False

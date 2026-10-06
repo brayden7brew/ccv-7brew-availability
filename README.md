@@ -252,6 +252,8 @@ Select a name to open that employee's access and password-setup card. Back links
 and saving access preserve directory filters. Import/email controls and the
 recent access log are grouped into collapsible sections beneath the directory.
 
+Admin → employee → **Extra availability requests** provides an **Add one extra request** button. Each grant adds one credit, used only once the regular rolling allowance is exhausted. Invalid submissions and WIW read failures do not consume it. Granted submissions remain in history but do not consume the regular allowance. Grants are audited; notice, minimum hours, and approval requirements still apply.
+
 ### Per-employee availability rules
 Each employee card has **Availability requirements**. Defaults are a 15-hour
 weekly minimum, counting only the overlap with 05:00–23:00 each day in the

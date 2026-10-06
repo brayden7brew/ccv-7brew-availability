@@ -24,6 +24,8 @@ class User(Base):
     location: Mapped[str] = mapped_column(String(120))
     secondary_location: Mapped[str] = mapped_column(String(120), default='', server_default='')
 
+    extra_request_credits: Mapped[int] = mapped_column(Integer, default=0, server_default='0')
+
     minimum_hours_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default='true')
     minimum_available_minutes: Mapped[int] = mapped_column(Integer, default=900, server_default='900')
     notice_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default='true')
@@ -56,6 +58,7 @@ class Change(Base):
     location: Mapped[str] = mapped_column(String(120))
     secondary_location: Mapped[str] = mapped_column(String(120), default='', server_default='')
     wiw_user_id: Mapped[int] = mapped_column(Integer)
+    request_limit_exempt: Mapped[bool] = mapped_column(Boolean, default=False, server_default='false')
     action: Mapped[str] = mapped_column(String(20))
     event_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     proposed: Mapped[dict] = mapped_column(JSON)

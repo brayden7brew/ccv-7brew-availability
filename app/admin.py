@@ -247,3 +247,21 @@ async def my_notifications(request: Request, db=Depends(get_db)):
         'after':{'enabled':actor.notifications_enabled,'locations':locations}}))
     db.commit()
     return RedirectResponse('/admin?notifications_saved=1',303)
+
+
+@router.post('/admin/users/{user_id}/extra-request')
+async def grant_extra_request(request: Request, user_id: int, db=Depends(get_db)):
+    actor = require_admin(request, db)
+    form = await request.form(max_fields=2)
+    csrf(request, form.get('csrf'))
+    lock_admin_changes(db)
+    db.refresh(actor)
+    if actor.role != 'admin' or not actor.active:
+        raise HTTPException(403, 'Administrator access is required.')
+    person = db.scalar(select(User).where(User.id == user_id).with_for_update().execution_options(populate_existing=True))
+    if not person: raise HTTPException(404, 'Employee not found.')
+    person.extra_request_credits += 1
+    db.add(AdminAudit(actor_id=actor.id, target_id=person.id, details={
+        'event':'extra_request_granted', 'remaining_credits':person.extra_request_credits}))
+    db.commit()
+    return RedirectResponse(f'/admin/users/{user_id}?'+directory_filters(request)[1]+'&saved=1',303)
