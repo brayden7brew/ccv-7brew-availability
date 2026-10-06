@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import select
 from app.config import settings
 from app.models import Audit, Change, User, WeeklySchedule, now
-from app.weekly import local_today
+from app.weekly import local_today, at
 from app.replacement_recovery import recover_requested_schedule
 from app.wiw import WIW, WIWError
 from test_portal import submit
@@ -101,7 +101,7 @@ def test_conflict_continuation_skips_verified_creates_and_preserves_past(client,
     start=date.fromisoformat(c.proposed['effective_date'])
     early=start-timedelta(days=1)
     def event(key,day): return {'id':key,'user_id':1,'account_id':10,'type':1,'all_day':True,
-        'start_time':f'{day}T00:00:00-04:00','end_time':f'{day+timedelta(days=1)}T00:00:00-04:00','recurrence':''}
+        'start_time':at(day,0).isoformat(),'end_time':at(day+timedelta(days=1),0).isoformat(),'recurrence':''}
     provider.events={11:event(11,early),12:event(12,start)}
     past=copy.deepcopy(provider.events[11])
     c.status='applying'; c.manager_id=2; c.dry_run=False

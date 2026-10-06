@@ -19,11 +19,11 @@ def test_count_only_operating_window():
     assert counted_minutes([{'mode':'hours','start':'05:00','end':'20:00'}])==600
 
 
-def test_default_notice_and_first_request_exception(db):
+def test_default_notice_includes_new_hires_and_legacy_exception_flags(db):
     person=db.get(User,1)
     assert person.minimum_available_minutes==900 and person.notice_days==14
-    assert employee_rules(db,person)['earliest']==local_today()+timedelta(days=1)
-    person.first_request_notice_exception=False
+    person.first_request_notice_exception=True
+    assert employee_rules(db,person)['earliest']==local_today()+timedelta(days=14)
     with pytest.raises(HTTPException):validate_employee_rules(db,person,data(13))
     validate_employee_rules(db,person,data(14))
     person.notice_enabled=False
@@ -48,17 +48,20 @@ def test_minimum_threshold_and_disable(db):
     validate_employee_rules(db,person,data(hours='none'))
 
 
-def test_submission_consumes_exception_only_on_success(client,db):
+def test_first_submission_requires_full_notice(client,db):
+    person=db.get(User,1)
+    person.first_request_notice_exception=True
+    db.commit()
     csrf=sign_in(client)
     form={'csrf':csrf,'action':'weekly','effective_date':(local_today()+timedelta(days=1)).isoformat()}
-    form.update({f'day_{i}_mode':'none' for i in range(7)})
-    assert client.post('/requests',data=form).status_code==422
-    db.refresh(db.get(User,1))
-    assert db.get(User,1).first_request_notice_exception
     form.update({f'day_{i}_mode':'all_day' for i in range(7)})
-    assert client.post('/requests',data=form).status_code==200
-    assert not db.get(User,1).first_request_notice_exception
     assert client.post('/requests',data=form).status_code==422
+    assert db.query(Change).count()==0
+    form['effective_date']=(local_today()+timedelta(days=13)).isoformat()
+    assert client.post('/requests',data=form).status_code==422
+    form['effective_date']=(local_today()+timedelta(days=14)).isoformat()
+    assert client.post('/requests',data=form).status_code==200
+    assert db.query(Change).count()==1
 
 
 def test_admin_can_set_and_disable_rules(client,db):

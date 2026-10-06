@@ -26,7 +26,7 @@ def test_insufficient_hours_keep_form_values_and_do_not_read_wiw(client,db,monke
     assert 'Keep my note &lt;script&gt;' in response.text
     assert '<script>alert(1)</script>' not in response.text
     assert 'counts as 5 hours' in response.text
-    assert db.query(Change).count()==0 and db.get(User,1).first_request_notice_exception
+    assert db.query(Change).count()==0
 
 
 def test_changed_notice_rules_are_displayed_with_preserved_entries(client,db):

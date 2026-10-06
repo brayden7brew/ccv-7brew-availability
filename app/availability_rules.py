@@ -1,8 +1,6 @@
 """Employee-specific rules, counted in local weekly wall-clock minutes."""
 from datetime import timedelta
-from sqlalchemy import select
 from fastapi import HTTPException
-from .models import Change
 from .weekly import local_today, blocked
 
 
@@ -16,11 +14,10 @@ def counted_minutes(days):
 
 
 def employee_rules(db,user):
-    first=bool(user.first_request_notice_exception and not db.scalar(select(Change.id).where(Change.employee_id==user.id,Change.action=='weekly').limit(1)))
-    notice=max(1,user.notice_days) if user.notice_enabled and not first else 1
+    notice=max(1,user.notice_days) if user.notice_enabled else 1
     return dict(minimum_enabled=user.minimum_hours_enabled,minimum_minutes=user.minimum_available_minutes,
         minimum_hours=user.minimum_available_minutes/60,daily_count_cap_minutes=600,notice_enabled=user.notice_enabled,notice_days=user.notice_days,
-        first_request_exception=first and user.notice_enabled,earliest=local_today()+timedelta(days=notice))
+        earliest=local_today()+timedelta(days=notice))
 
 
 def validate_employee_rules(db,user,data):

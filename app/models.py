@@ -28,7 +28,7 @@ class User(Base):
     minimum_available_minutes: Mapped[int] = mapped_column(Integer, default=900, server_default='900')
     notice_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default='true')
     notice_days: Mapped[int] = mapped_column(Integer, default=14, server_default='14')
-    first_request_notice_exception: Mapped[bool] = mapped_column(Boolean, default=True, server_default='false')
+    first_request_notice_exception: Mapped[bool] = mapped_column(Boolean, default=False, server_default='false')
 
 class Scope(Base):
     __tablename__ = 'manager_scopes'

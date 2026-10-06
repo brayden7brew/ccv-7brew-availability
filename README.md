@@ -261,15 +261,11 @@ on/off control. Minimum hours can be edited in quarter-hour increments (up to
 not past/today start dates. The older MINIMUM_NOTICE_DAYS environment variable
 no longer controls weekly submissions.
 
-Existing users receive these defaults through migration, without a new-hire
-exception. Newly created portal records (WIW auto-enrollment, roster import,
-webhook new hire, or operator creation) can make their first successful weekly
-submission for tomorrow. Invalid/failed submissions do not consume this exception;
-a successfully submitted request does, including one later rejected or tested in
-dry-run. All subsequent submissions use their configured notice. Minimum hours
-still apply to the first request. Rules are validated under the employee lock
-before reading WIW, are snapshotted in the submission audit, and never alter
-already-submitted requests. Webhook updates preserve these individual settings.
+New hires and existing employees follow the same configured notice period from their
+first submission onward (14 days by default). Legacy first-request exception flags
+are ignored. Rules are validated under the employee lock before reading WIW, are
+snapshotted in the submission audit, and never alter already-submitted requests.
+Webhook updates preserve individual settings.
 
 ### Live form validation
 The weekly form requires JavaScript and validates dates, daily time windows, counted minimum hours, and request limits before enabling Send. It shows a live counted-hours total and errors beside daily time fields. Only a local script is allowed on the two weekly-form routes; inline and third-party scripts remain blocked. Server validation remains authoritative, including updated employee rules, and returns invalid submissions on the same form with entered values preserved. A WIW read failure also preserves the form without creating a request.
