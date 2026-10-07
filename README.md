@@ -82,7 +82,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 Official API fields were verified on **2026-09-29** from [When I Work’s official documentation](https://apidocs.wheniwork.com/external/index.html) and its [linked OpenAPI JSON](https://apidocs.wheniwork.com/external/monolith/docs-master.json). The relevant contract and original source digest are in `docs/wiw-contract.json`. Details are in `docs/WIW-INTEGRATION.md`.
 
 1. Obtain supported API access through WIW. Use a company-controlled supervisor/manager/admin account authorized for the employees involved.
-2. Authenticate on the server using the official login service; obtain a token. The portal accepts that token through `WIW_TOKEN`; it does not collect WIW passwords or automatically refresh expired tokens. The operator must rotate the token on expiry/revocation. Never put a token in a browser, URL, source repository, screenshot, or support log.
+2. Authenticate on the server using the official login service; obtain a token. The portal accepts that token through `WIW_TOKEN`; it does not collect WIW passwords. Automatic renewal is enabled by default: the web service checks hourly and refreshes early, saving the replacement encrypted in the shared database. Already expired/revoked tokens may require an operator to supply a new token. Never put a token in a browser, URL, source repository, screenshot, or support log.
 3. Set `WIW_MODE=live`, `WIW_TOKEN`, `WIW_CONTEXT_USER_ID` (the service user within the intended workplace), and `WIW_ACCOUNT_ID`. Keep `DRY_RUN=true`.
 4. Provision portal users with verified WIW **user IDs**, not person/login IDs. Assign their portal approval groups and manager scopes. Avoid reusing demo users with fictional mappings.
 5. Restart the app and verify the employee’s current availability matches WIW. Approve a dry-run request and inspect its audit. The API adapter rejects returned events from another account or employee.
@@ -144,7 +144,7 @@ Password resets and disabling revoke existing sessions. Run cleanup daily to rem
 | `SECURE_COOKIES` | `false` on local HTTP; `true` for production HTTPS. |
 | `DRY_RUN` | Default `true`; suppresses all WIW writes. |
 | `WIW_MODE` | `demo` (empty sample reads) or `live` (real WIW reads). |
-| `WIW_TOKEN` | Server-only company bearer token; operator rotates it. |
+| `WIW_TOKEN` | Initial company bearer token; automatic renewal stores encrypted replacements. Change it only to reconnect. |
 | `WIW_DEVELOPER_KEY` | Optional server-only developer key enabling WIW email/password login. |
 | `WIW_CONTEXT_USER_ID` | Service account user ID for `W-UserID` header. |
 | `WIW_ACCOUNT_ID` | Target workplace ID. |
@@ -279,3 +279,30 @@ Administrators can use **Admin → My notifications** to disable their own autom
 The home screen now includes Availability, Requests, Ops Dashboard and Administration
 according to the signed-in person's permissions. Configure the private Ops reporting
 connection and grant access as described in [Shared portal setup](docs/SHARED-PORTAL.md).
+
+
+### Automatic When I Work token renewal
+`WIW_AUTO_REFRESH` defaults to `true`. The web service checks hourly even without
+traffic, and API calls also check before sending. Tokens are refreshed four days
+after their JWT issued-at time (or two days before an earlier explicit expiry).
+Missing/invalid issued-at claims trigger immediate renewal. Failures back off for
+one hour and appear in Admin → When I Work connection. No availability write is
+retried automatically. This is an in-app warning, not an email notification.
+
+The official endpoint is `POST https://api.login.wheniwork.com/refresh`, with the
+current bearer token and a JSON `token` in its successful response. Contract:
+https://apidocs.wheniwork.com/external/login/docs-master.json (checked 2026-10-07).
+Renewal timing guidance: https://help.wheniwork.net/articles/getting-access-to-the-when-i-work-api-computer/
+
+Run migrations before starting the updated app. PostgreSQL locks a singleton
+credential row during renewal, preventing concurrent refreshes by multiple instances.
+Tokens are Fernet-encrypted using a domain-separated key derived from SECRET_KEY;
+keep that secret stable and backed up separately from the database. They never
+appear in the admin page, audit records, or logs. Keep all instances on the same
+SECRET_KEY, account, user context, and initial WIW_TOKEN. An unchanged environment
+token does not overwrite a saved renewal after a restart. To reconnect, supply a
+**new** WIW_TOKEN and restart all instances; changing the configured token or
+workplace/context reseeds the saved credential. Do not roll back to a pre-renewal
+version that only reads the initial environment token after it has been rotated.
+If refresh succeeded remotely but the response or database save was lost, manual
+reconnection may be necessary. The web service must stay running for idle renewal.

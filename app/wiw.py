@@ -21,10 +21,15 @@ class WIW:
 
     def call(self, method, path, *, payload=None, params=None):
         try:
+            from .wiw_tokens import service_token
+            try:
+                token = service_token()
+            except Exception:
+                raise WIWError('The saved When I Work connection needs administrator attention.', reason='authentication') from None
             with httpx.Client(base_url='https://api.wheniwork.com', timeout=20,
                               transport=self.transport, follow_redirects=False) as client:
                 response = client.request(method, path, params=params, json=payload,
-                    headers={'Authorization': f'Bearer {self.cfg.wiw_token}',
+                    headers={'Authorization': f'Bearer {token}',
                              'W-UserID': str(self.cfg.wiw_context_user_id)})
             if not response.is_success:
                 # Preserve diagnostic codes without exposing upstream bodies or credentials.
@@ -38,7 +43,7 @@ class WIW:
                         message = body.get('error') or body.get('message')
                         if isinstance(message, str):
                             # Only the explanation, never the complete response or headers.
-                            for secret in (self.cfg.wiw_token, self.cfg.wiw_developer_key):
+                            for secret in (token, self.cfg.wiw_token, self.cfg.wiw_developer_key):
                                 if secret:
                                     message = message.replace(secret, '[REDACTED]')
                             message = re.sub(r'eyJ[\w-]+\.[\w-]+\.[\w-]+', '[REDACTED]', message)

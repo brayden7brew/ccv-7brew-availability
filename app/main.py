@@ -28,7 +28,8 @@ from .workflow import allowed, audit, decide
 logger = logging.getLogger(__name__)
 
 cfg = settings()
-app = FastAPI(title='CCV 7 Brew Portal', docs_url=None, redoc_url=None, openapi_url=None)
+from .wiw_tokens import token_lifespan
+app = FastAPI(lifespan=token_lifespan, title='CCV 7 Brew Portal', docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(DeviceSessionMiddleware, secret_key=cfg.secret_key, session_cookie='portal_session',
     normal_max_age=cfg.session_hours * 3600, same_site='lax', https_only=cfg.secure_cookies)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=cfg.allowed_hosts.split(','))

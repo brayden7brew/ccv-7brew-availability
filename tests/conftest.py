@@ -2,6 +2,7 @@ import os
 os.environ['SECRET_KEY'] = 'test-secret-not-for-production-123456789'
 os.environ['DATABASE_URL'] = os.environ.get('TEST_DATABASE_URL', 'sqlite://')
 os.environ['WIW_MODE'] = 'demo'
+os.environ['WIW_AUTO_REFRESH'] = 'false'
 os.environ['WIW_DEVELOPER_KEY'] = ''
 os.environ['DRY_RUN'] = 'true'
 os.environ['EMAIL_ENABLED'] = 'false'

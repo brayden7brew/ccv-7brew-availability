@@ -145,3 +145,12 @@ class WebhookBatch(Base):
     created: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     next_attempt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     last_error: Mapped[str] = mapped_column(String(120), default='')
+
+class WIWCredential(Base):
+    __tablename__ = 'wiw_credentials'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    seed_hash: Mapped[str] = mapped_column(String(64), default='', server_default='')
+    encrypted_token: Mapped[str] = mapped_column(Text, default='', server_default='')
+    next_attempt: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_success: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str] = mapped_column(String(300), default='', server_default='')

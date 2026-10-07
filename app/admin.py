@@ -46,7 +46,8 @@ def admin_page(request: Request, db=Depends(get_db)):
     history=list(db.scalars(select(AdminAudit).order_by(AdminAudit.id.desc()).limit(30)))
     ids={v for h in history for v in (h.actor_id,h.target_id)}
     names=dict(db.execute(select(User.id,User.name).where(User.id.in_(ids))).all()) if ids else {}
-    return page(request,'admin.html',user=actor,people=people,history=history,names=names,
+    from .wiw_tokens import connection_status
+    return page(request,'admin.html',wiw_connection=connection_status(db),user=actor,people=people,history=history,names=names,
         notification_scopes=sorted(set(db.scalars(select(Scope.location).where(Scope.manager_id==actor.id))) | set(assigned_locations(actor))),
         locations=location_choices(db),filters=filters,directory_query=query,total=total,page_number=number,pages=pages,
         previous_url=page_url(number-1),next_url=page_url(number+1),
