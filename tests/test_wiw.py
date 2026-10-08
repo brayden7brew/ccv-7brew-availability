@@ -300,3 +300,32 @@ def test_recovery_uses_explicit_utc_rfc_dates_and_checks_original_instants(monke
         return httpx.Response(200,json={'availabilityevent':{'id':77,**body}})
     change=SimpleNamespace(action='weekly',status='applying',manager_id=2,dry_run=False,wiw_user_id=20)
     WIW(httpx.MockTransport(handle)).weekly_operation(change,{'action':'create','payload':payload,'rfc_dates':True})
+
+
+@pytest.mark.parametrize('start,end,expected_end', [
+    ('2026-10-26T00:00:00-04:00', '2026-10-27T00:00:00-04:00', '2026-10-27T03:59:59+00:00'),
+    ('2026-11-01T00:00:00-04:00', '2026-11-02T00:00:00-05:00', '2026-11-02T04:59:59+00:00'),
+    ('2027-03-14T00:00:00-05:00', '2027-03-15T00:00:00-04:00', '2027-03-15T03:59:59+00:00'),
+])
+@pytest.mark.parametrize('action', ['create', 'update'])
+def test_weekly_all_day_wire_end_is_inclusive_without_changing_plan(monkeypatch, start, end, expected_end, action):
+    from dateutil.parser import parse
+    live(monkeypatch)
+    payload = {'type': 1, 'all_day': True, 'start_time': start, 'end_time': end,
+               'recurrence': 'FREQ=WEEKLY'}
+    saved = {**payload, 'id': 77, 'user_id': 20, 'account_id': 10, 'end_time': expected_end}
+    calls = []
+    def handle(request):
+        calls.append(request.method)
+        if request.method == 'GET':
+            return httpx.Response(200, json={'availabilityevent': saved})
+        body = json.loads(request.content)
+        assert parse(body['start_time']) == parse(start)
+        assert parse(body['end_time']) == parse(expected_end)
+        return httpx.Response(200, json={'availabilityevent': saved} if action == 'create'
+                              else {'availabilityevents': [saved]})
+    change = SimpleNamespace(action='weekly', status='applying', manager_id=2, dry_run=False, wiw_user_id=20)
+    WIW(httpx.MockTransport(handle)).weekly_operation(change, {
+        'action': action, 'event_id': 77, 'payload': payload, 'rfc_dates': True})
+    assert payload['end_time'] == end
+    assert calls == (['POST'] if action == 'create' else ['PUT', 'GET'])

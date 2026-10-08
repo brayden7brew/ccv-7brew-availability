@@ -1,7 +1,7 @@
 """Official 2026-09-29 contract: docs/wiw-contract.json. Never log headers/bodies."""
 import httpx
 import re
-from datetime import timedelta, timezone
+from datetime import timedelta, timezone, time
 from zoneinfo import ZoneInfo
 from dateutil.parser import parse
 from .config import settings
@@ -136,6 +136,20 @@ class WIW:
                 or change.dry_run is not False or self.cfg.dry_run or self.cfg.wiw_mode != 'live'):
             raise WIWError('Write denied: approved live weekly dispatch required.')
         wire_payload = dict(operation.get('payload', {}))
+        if wire_payload.get('all_day') is True:
+            zone = ZoneInfo(self.cfg.business_timezone)
+            start = parse(wire_payload['start_time'])
+            end = parse(wire_payload['end_time'])
+            if start.tzinfo is None or end.tzinfo is None:
+                raise WIWError('Write date must include a timezone.')
+            local_start, local_end = start.astimezone(zone), end.astimezone(zone)
+            if (local_start.time() == time() and local_end.time() == time()
+                    and local_end.date() == local_start.date() + timedelta(days=1)):
+                # Portal plans use an exclusive next-midnight boundary. WIW
+                # stores a single all-day occurrence with an inclusive end.
+                # Subtract in UTC so 23/25-hour local days remain intact.
+                wire_payload['end_time'] = (end.astimezone(timezone.utc)
+                    - timedelta(seconds=1)).isoformat()
         if operation.get('rfc_dates'):
             from email.utils import format_datetime
             for key in ('start_time', 'end_time'):

@@ -57,7 +57,7 @@ def approve_weekly(db, actor, change, note, provider, replace_existing=False):
     return dispatch_weekly(db, actor, change, operations, provider)
 
 
-def dispatch_weekly(db, actor, change, operations, provider, start_index=0):
+def dispatch_weekly(db, actor, change, operations, provider, start_index=0, verify_complete=False):
     from .workflow import audit
     managed = db.scalars(select(ManagedEvent).where(ManagedEvent.employee_id == change.employee_id,
         ManagedEvent.active.is_(True))).all()
@@ -81,6 +81,19 @@ def dispatch_weekly(db, actor, change, operations, provider, start_index=0):
                 db.add(ManagedEvent(employee_id=change.employee_id, event_id=event['id'], snapshot=event))
             audit(db, change, actor, 'operation_succeeded', {'index':index, 'response':result})
             db.commit()
+        if verify_complete:
+            from collections import Counter
+            from .event_identity import event_signature
+            try:
+                current = provider.read(change.wiw_user_id, change.read_start, change.read_end)
+                expected = [op['payload'] for op in operations if op['action'] == 'create']
+                if Counter(map(event_signature, current['availabilityevents'])) != Counter(map(event_signature, expected)):
+                    raise WIWError('WIW does not match the complete approved schedule.')
+            except (WIWError, ValueError, TypeError, KeyError) as exc:
+                change.status = 'needs_reconciliation'
+                audit(db, change, actor, 'write_uncertain', {'reason':str(exc), 'final_verification':True})
+                db.commit()
+                return change
         change.status = 'applied'
         audit(db, change, actor, 'applied', {'operation_count':len(operations)})
     db.add(WeeklySchedule(change_id=change.id, employee_id=change.employee_id,
