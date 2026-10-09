@@ -17,8 +17,9 @@ def sign_in(client, email='employee@test.local'):
     return token(response)
 
 def submit(client):
+    from app.weekly import local_today
     csrf = sign_in(client)
-    date = (now()+timedelta(days=30)).strftime('%Y-%m-%d')
+    date = (local_today()+timedelta(days=30)).isoformat()
     data = {'csrf':csrf,'action':'weekly','effective_date':date,'employee_note':'New term'}
     for i in range(7): data[f'day_{i}_mode']='all_day'
     data.update(day_0_mode='hours', day_0_start='09:00', day_0_end='17:00')
