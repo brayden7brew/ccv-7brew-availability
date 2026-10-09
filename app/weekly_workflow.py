@@ -57,7 +57,7 @@ def approve_weekly(db, actor, change, note, provider, replace_existing=False):
     return dispatch_weekly(db, actor, change, operations, provider)
 
 
-def dispatch_weekly(db, actor, change, operations, provider, start_index=0, verify_complete=False):
+def dispatch_weekly(db, actor, change, operations, provider, start_index=0, verify_complete=False, final_events=None):
     from .workflow import audit
     managed = db.scalars(select(ManagedEvent).where(ManagedEvent.employee_id == change.employee_id,
         ManagedEvent.active.is_(True))).all()
@@ -79,6 +79,10 @@ def dispatch_weekly(db, actor, change, operations, provider, start_index=0, veri
             elif operation['action'] == 'create':
                 event = result['availabilityevent']
                 db.add(ManagedEvent(employee_id=change.employee_id, event_id=event['id'], snapshot=event))
+            elif operation['action'] == 'update':
+                item = next((m for m in managed if m.event_id == operation['event_id']), None)
+                if item:
+                    item.snapshot = result['availabilityevents'][0]
             audit(db, change, actor, 'operation_succeeded', {'index':index, 'response':result})
             db.commit()
         if verify_complete:
@@ -86,7 +90,7 @@ def dispatch_weekly(db, actor, change, operations, provider, start_index=0, veri
             from .event_identity import event_signature
             try:
                 current = provider.read(change.wiw_user_id, change.read_start, change.read_end)
-                expected = [op['payload'] for op in operations if op['action'] == 'create']
+                expected = final_events if final_events is not None else [op['payload'] for op in operations if op['action'] == 'create']
                 if Counter(map(event_signature, current['availabilityevents'])) != Counter(map(event_signature, expected)):
                     raise WIWError('WIW does not match the complete approved schedule.')
             except (WIWError, ValueError, TypeError, KeyError) as exc:
@@ -122,7 +126,8 @@ def reconcile_weekly(db, actor, change, outcome, note, provider):
         snapshots = approval.details['managed_event_snapshots']
     else:
         retained = approval.details.get('retained_external_events', [])
-        expected = retained + [op['payload'] for op in approval.details['operations'] if op['action']=='create']
+        expected = retained + approval.details.get('final_managed_payloads',
+            [op['payload'] for op in approval.details['operations'] if op['action']=='create'])
         from .event_identity import event_signature as fingerprint
         from collections import Counter
         if Counter(map(fingerprint,current['availabilityevents'])) != Counter(map(fingerprint,expected)):

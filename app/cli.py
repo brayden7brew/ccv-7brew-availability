@@ -58,6 +58,9 @@ def main():
     creations = commands.add_parser('resume-verified-creations')
     creations.add_argument('--id', type=int, required=True)
     creations.add_argument('--manager-email', required=True)
+    dst = commands.add_parser('repair-dst-anchor')
+    dst.add_argument('--id', type=int, required=True)
+    dst.add_argument('--manager-email', required=True)
     reconcile = commands.add_parser('reconcile')
     reconcile.add_argument('--id', type=int, required=True)
     reconcile.add_argument('--manager-email', required=True)
@@ -144,15 +147,18 @@ def main():
                 change = recover_requested_schedule(db, actor, args.id, args.preserve_before, WIW(), resolve_conflicts=args.resolve_conflicts)
             except (ValueError, WIWError) as exc: raise SystemExit(str(exc))
             print(f'Request #{change.id}: {change.status}')
-        elif args.command in ('resume-verified-deletions', 'resume-verified-creations'):
+        elif args.command in ('resume-verified-deletions', 'resume-verified-creations', 'repair-dst-anchor'):
             from .weekly_workflow import resume_verified_deletions
             from .create_recovery import resume_verified_creations
+            from .dst_recovery import repair_dst_anchor
             from .wiw import WIWError
             actor = db.scalar(select(User).where(User.email == args.manager_email.lower(),
                 User.role.in_(['manager','admin']), User.active.is_(True)))
             if not actor: raise SystemExit('Active manager or administrator required.')
             try:
-                recover = resume_verified_creations if args.command == 'resume-verified-creations' else resume_verified_deletions
+                recover = {'resume-verified-creations': resume_verified_creations,
+                           'resume-verified-deletions': resume_verified_deletions,
+                           'repair-dst-anchor': repair_dst_anchor}[args.command]
                 change = recover(db, actor, args.id, WIW())
             except (ValueError, WIWError) as exc:
                 raise SystemExit(str(exc))

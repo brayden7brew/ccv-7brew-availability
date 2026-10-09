@@ -181,6 +181,7 @@ class WIW:
             # A successful HTTP status alone does not prove that WIW capped the rule.
             observed = self.get(operation['event_id'], change.wiw_user_id)
             self.verify_payload(observed, operation['payload'])
+            result['availabilityevents'] = [observed]
         elif operation['action'] == 'create':
             result = self.call('POST', '/2/availabilityevents', payload={
                 **wire_payload, 'user_id':change.wiw_user_id, 'account_id':self.cfg.wiw_account_id})

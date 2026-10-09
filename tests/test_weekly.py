@@ -199,3 +199,29 @@ def test_repeat_weekday_matches_every_occurrence():
         occurrences = list(rrulestr(payload['recurrence'] + ';COUNT=3', dtstart=start))
         assert occurrences[0] == start
         assert all(item.weekday() == start.weekday() for item in occurrences)
+
+
+@pytest.mark.parametrize('effective,first,next_sunday,offset', [
+    ('2026-10-26', '2026-11-01', '2026-11-08', '-05:00'),
+    ('2027-03-08', '2027-03-14', '2027-03-21', '-04:00'),
+])
+def test_clock_change_anchor_keeps_first_day_and_indefinite_following_sundays(effective, first, next_sunday, offset):
+    plan = event_plan([profile(effective, 'none')], today=date(2026, 10, 8))
+    once, repeated = plan[:2]
+    assert len(plan) == 8
+    assert 'recurrence' not in once and once['start_time'].startswith(first)
+    assert repeated['start_time'] == next_sunday + 'T00:00:00' + offset
+    assert repeated['recurrence'] == 'FREQ=WEEKLY;BYDAY=SU'
+    assert all(p['all_day'] for p in plan)
+
+
+@pytest.mark.parametrize('count', [1, 2, 4])
+def test_clock_change_split_preserves_finite_count(count):
+    from app.weekly import split_dst_anchor
+    payload = {'type': 1, 'all_day': True, 'start_time': '2026-11-01T00:00:00-04:00',
+               'end_time': '2026-11-02T00:00:00-05:00', 'recurrence': f'FREQ=WEEKLY;BYDAY=SU;COUNT={count}'}
+    plan = split_dst_anchor(payload)
+    assert 'recurrence' not in plan[0]
+    assert len(plan) == (1 if count == 1 else 2)
+    if count > 1: assert plan[1]['recurrence'].endswith(f'COUNT={count-1}')
+    assert payload['recurrence'].endswith(f'COUNT={count}')

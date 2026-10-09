@@ -119,6 +119,40 @@ def blocked(day):
     if day['mode'] == 'unavailable': return [(start, end)]
     return [(a,b) for a,b in [(0,start),(end,1440)] if a < b]
 
+def split_dst_anchor(payload):
+    """Keep a clock-change all-day occurrence outside the recurring rule.
+
+    WIW rejects adjacent weekly rules when an all-day recurrence is anchored
+    on the 25-hour fall-back day. A one-off plus next week's recurring rule
+    preserves the local schedule. Apply the same representation to spring.
+    """
+    if not payload.get('all_day') or not payload.get('recurrence'):
+        return [dict(payload)]
+    zone = ZoneInfo(settings().business_timezone)
+    start = datetime.fromisoformat(payload['start_time']).astimezone(zone)
+    end = datetime.fromisoformat(payload['end_time']).astimezone(zone)
+    if start.utcoffset() == end.utcoffset():
+        return [dict(payload)]
+    if start.time() != time() or end.time() != time() or end.date() != start.date() + timedelta(days=1):
+        raise ValueError('Only a single full local day can be split at a clock change.')
+    parts = payload['recurrence'].split(';')
+    if (parts[0] != 'FREQ=WEEKLY' or not all(p.startswith(('FREQ=', 'BYDAY=', 'COUNT=')) for p in parts)
+            or sum(p.startswith('BYDAY=') for p in parts) != 1):
+        raise ValueError('Unsupported clock-change recurrence.')
+    once = dict(payload)
+    once.pop('recurrence')
+    count = next((int(p[6:]) for p in parts if p.startswith('COUNT=')), None)
+    if count is not None and count <= 0:
+        raise ValueError('Invalid recurrence count.')
+    if count == 1:
+        return [once]
+    later = {**payload, 'start_time':(start + timedelta(days=7)).isoformat(),
+             'end_time':(end + timedelta(days=7)).isoformat()}
+    if count is not None:
+        later['recurrence'] = ';'.join(f'COUNT={count-1}' if p.startswith('COUNT=') else p for p in parts)
+    return [once, later]
+
+
 def event_plan(profiles, today=None):
     """Rebuild only portal-managed rules from today's local midnight onward.
 
@@ -141,9 +175,9 @@ def event_plan(profiles, today=None):
                 count = ((end-timedelta(days=1)-first).days//7)+1
                 rule += f';COUNT={count}'
             for a,b in blocked(day):
-                result.append({'type':1, 'start_time':at(first,a).isoformat(),
+                result.extend(split_dst_anchor({'type':1, 'start_time':at(first,a).isoformat(),
                     'end_time':at(first,b).isoformat(), 'all_day':a==0 and b==1440,
-                    'notes':'Weekly hours approved in the availability portal', 'recurrence':rule})
+                    'notes':'Weekly hours approved in the availability portal', 'recurrence':rule}))
     return result
 
 
