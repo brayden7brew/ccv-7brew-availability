@@ -82,7 +82,7 @@
       : `${counted / 60} hours counted · No weekly minimum applies.`;
     if (counted < minimum) errors.push(`Make ${(minimum - counted) / 60} more hours available to meet your weekly minimum. If you need to provide fewer hours, contact your stand manager to discuss an exception.`);
     if (note.value.length > 2000) errors.push('Keep your note to 2,000 characters or fewer.');
-    if (blocked) errors.push('Your 30-day request limit has been reached. See the date above for your next request.');
+    if (blocked) errors.push('Your monthly request limit has been reached. See the date above for your next request.');
     feedback.textContent = errors.length ? errors.join(' ') : 'Your request is ready to send.';
     form.dataset.validationState = errors.length ? 'invalid' : 'valid';
     button.disabled = sending || errors.length > 0;

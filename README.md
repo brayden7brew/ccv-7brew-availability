@@ -184,7 +184,7 @@ Set `WIW_DEVELOPER_KEY` in `.env` (or as a secret environment variable in Render
 
 
 ### Rolling request limit
-Set `AVAILABILITY_REQUEST_LIMIT_30_DAYS=2` in `.env` to allow two weekly submissions per employee over the preceding 30 days. Default `0` means unlimited. Restart the server after changing it. Pending, rejected, approved, and failed-sync submissions all count; invalid/blocked submissions do not. Each submission expires from the count exactly 30 days later. This is a submission limit, not a limit on manager decisions, and applies to all portal users submitting their own hours. Counts appear on the dashboard, form, and request detail. PostgreSQL employee-row locking serializes submissions to enforce the limit; SQLite remains for sequential local tests only.
+Set `AVAILABILITY_REQUEST_LIMIT_30_DAYS=2` in `.env` to allow two weekly submissions per employee per calendar month in the configured business timezone (America/New_York). Default `0` means unlimited. Restart the server after changing it. Pending, rejected, approved, and failed-sync submissions all count; invalid/blocked submissions do not. The regular allowance resets at local midnight on the first of each month. The legacy environment variable name is retained so existing configured limits continue to apply. Unused administrator-granted extra requests carry forward and are used only after the regular allowance is exhausted. This is a submission limit, not a limit on manager decisions, and applies to all portal users submitting their own hours. Counts appear on the dashboard, form, and request detail. PostgreSQL employee-row locking serializes submissions to enforce the limit; SQLite remains for sequential local tests only.
 
 ### Administrator menu and location approvals
 Administrators can open `/admin` to assign employee/manager roles, set each employee's approval location, and replace a manager's permitted approval locations (one exact location name per line). This is portal routing, not a WIW schedule assignment. New WIW sign-ins appear after automatic enrollment; set their correct location before they submit. A pending or unconfirmed request blocks moving an employee to a different location. Access changes are logged in `admin_audit`. This menu does not create additional administrators, reactivate disabled users, or alter WIW permissions.
@@ -252,7 +252,7 @@ Select a name to open that employee's access and password-setup card. Back links
 and saving access preserve directory filters. Import/email controls and the
 recent access log are grouped into collapsible sections beneath the directory.
 
-Admin → employee → **Extra availability requests** provides an **Add one extra request** button. Each grant adds one credit, used only once the regular rolling allowance is exhausted. Invalid submissions and WIW read failures do not consume it. Granted submissions remain in history but do not consume the regular allowance. Grants are audited; notice, minimum hours, and approval requirements still apply.
+Admin → employee → **Extra availability requests** provides an **Add one extra request** button. Each grant adds one credit, used only once the regular monthly allowance is exhausted. Invalid submissions and WIW read failures do not consume it. Granted submissions remain in history but do not consume the regular allowance. Grants are audited; notice, minimum hours, and approval requirements still apply.
 
 ### Per-employee availability rules
 Each employee card has **Availability requirements**. Defaults are a 15-hour

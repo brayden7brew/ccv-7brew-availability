@@ -293,7 +293,7 @@ async def submit(request: Request, db=Depends(get_db)):
         return invalid('An earlier availability update needs attention. Ask your administrator to resolve it before saving another update.', 409)
     usage = request_usage(db, user.id)
     if usage['blocked']:
-        return invalid(f"You have reached the limit of {usage['limit']} requests in 30 days. You can submit again at {local_datetime(usage['reset'])}.", 429)
+        return invalid(f"You have reached the limit of {usage['limit']} requests this calendar month. You can submit again at {local_datetime(usage['reset'])}.", 429)
     rows = timeline(db, user.id, cfg.dry_run)
     zone = ZoneInfo(cfg.business_timezone)
     begin = datetime.combine(local_today(), datetime.min.time(), tzinfo=zone)

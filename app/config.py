@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     smtp_username: str = ''
     smtp_password: str = ''
     smtp_ssl: bool = False
+    # Legacy environment variable name retained; limit now applies per calendar month.
     availability_request_limit_30_days: int = Field(default=0, ge=0)
 
     @model_validator(mode='after')
