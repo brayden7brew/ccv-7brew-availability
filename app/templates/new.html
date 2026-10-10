@@ -12,7 +12,6 @@
 <noscript><p class="error">Enable JavaScript to check your hours and submit this form. Your entries must meet the requirements shown above.</p></noscript>
 <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="weekly">
 <div class="form-step"><span>1</span><div class="start-step-heading"><h2>When should these hours start?</h2><small class="muted" id="earliest-start">Earliest start date: {{ earliest|date_label }}</small></div></div><label class="start-date">Start date<input type="date" name="effective_date" id="effective-date" min="{{ earliest }}" max="{{ latest }}" value="{{ effective_date }}" aria-describedby="earliest-start start-date-feedback" required></label><p id="start-date-feedback" class="start-date-feedback" aria-live="polite"></p>
-<p class="muted">Your current approved hours continue until this date. {% if direct %}Your new hours are saved without another manager’s approval.{% else %}Submitting a request does not change them; manager approval is required.{% endif %}</p>
 <div class="form-step"><span>2</span><h2>Set your unavailable hours</h2></div><p class="muted">Select when you cannot work each day. Add another period if you have separate unavailable hours on the same day. All-day options apply to the whole day.</p><div class="weekly-editor">
 {% for i in [1,2,3,4,5,6,0] %}{% set day = days[i] %}{% set hours = defaults[i] %}
 <fieldset class="day-row" data-day="{{ day }}"><legend>{{ day }}</legend>
