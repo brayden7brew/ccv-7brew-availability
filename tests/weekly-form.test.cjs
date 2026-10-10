@@ -12,7 +12,7 @@ function page(minimum = 900, blocked = false) {
   const date = Object.assign(element(), {min:'2026-10-15', max:'2027-10-02', validity:{valid:true}});
   const note = element();
   const button = element(); button.textContent = 'Send to my manager';
-  const credit = element(), feedback = element(), events = {}, windowEvents = {};
+  const dateFeedback = element(), credit = element(), feedback = element(), events = {}, windowEvents = {};
   const rows = Array.from({length:7}, (_,i) => {
     const fields = {mode:element('none'),start:element(),end:element(),error:element()};
     fields.end.options = [element(), ...Array.from({length:73}, (_,n) => {
@@ -26,10 +26,10 @@ function page(minimum = 900, blocked = false) {
   const form = {dataset:{minimumMinutes:String(minimum),limitBlocked:String(blocked)},
     elements:{namedItem(name) { return name === 'effective_date' ? date : note; }},
     querySelectorAll() { return rows; }, addEventListener(event, handler) { events[event] = handler; }};
-  const ids = {'weekly-form':form,'weekly-submit':button,'weekly-credit':credit,'weekly-errors':feedback};
+  const ids = {'start-date-feedback':dateFeedback,'weekly-form':form,'weekly-submit':button,'weekly-credit':credit,'weekly-errors':feedback};
   runInNewContext(source, {document:{getElementById(id) { return ids[id]; }},
     window:{addEventListener(event, handler) { windowEvents[event] = handler; }}});
-  return {date,note,button,credit,feedback,rows,change:events.change, input:events.input, restore:windowEvents.pageshow,
+  return {date,dateFeedback,note,button,credit,feedback,rows,change:events.change, input:events.input, restore:windowEvents.pageshow,
     submit() { let prevented=false; events.submit({preventDefault(){prevented=true;}}); return prevented; },
     hours(i,start,end) { rows[i].fields.mode.value='hours'; rows[i].fields.start.value=start; rows[i].fields.end.value=end; events.change(); }};
 }
@@ -118,4 +118,28 @@ test('unavailable hours count the remaining operating hours with the daily cap',
   p.change(); assert.match(p.credit.textContent,/8.5 hours counted/); assert.equal(p.button.disabled,false);
   start.value='09:15'; p.change(); assert.equal(p.button.disabled,true); assert.match(row.fields.error.textContent,/overlap/);
   start.value='09:30'; p.change(); assert.equal(p.button.disabled,false); assert.match(p.credit.textContent,/1 hours counted/);
+});
+
+test('date feedback changes red to green and blocks early iPhone selections', () => {
+  const p = page(0);
+  assert.equal(p.date.attributes['data-date-state'], 'empty');
+  p.date.value = '2026-10-14'; p.input();
+  // The picker can report valid even though the value is earlier than min.
+  assert.equal(p.date.validity.valid, true);
+  assert.equal(p.date.attributes['data-date-state'], 'invalid');
+  assert.equal(p.date.attributes['aria-invalid'], 'true');
+  assert.match(p.dateFeedback.textContent, /Oct 15, 2026 or later/);
+  assert.equal(p.button.disabled, true);
+  assert.equal(p.submit(), true);
+  p.date.value = p.date.min; p.change();
+  assert.equal(p.date.attributes['data-date-state'], 'valid');
+  assert.equal(p.date.attributes['aria-invalid'], 'false');
+  assert.equal(p.dateFeedback.textContent, 'This start date is allowed.');
+  assert.equal(p.button.disabled, false);
+  p.date.value = '2027-10-03'; p.change();
+  assert.equal(p.date.attributes['data-date-state'], 'invalid');
+  assert.match(p.dateFeedback.textContent, /Oct 2, 2027 or earlier/);
+  p.date.value = ''; p.input();
+  assert.equal(p.date.attributes['data-date-state'], 'empty');
+  assert.equal(p.button.disabled, true);
 });

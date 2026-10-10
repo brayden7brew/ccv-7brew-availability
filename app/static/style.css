@@ -34,3 +34,10 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .week-totals-period{flex-basis:100%;color:#52695e;font-size:.85rem}
 
 .start-step-heading{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}.start-step-heading small{font-size:.85rem}
+
+/* Start-date feedback stays visible when a native mobile picker allows an early date. */
+#effective-date[data-date-state="invalid"]{border:2px solid #b42318;background:#fff1ee;color:#912018}
+#effective-date[data-date-state="valid"]{border:2px solid #287b53;background:#edf8f1;color:#216245}
+.start-date-feedback{margin-top:8px;font-size:.9rem;color:#64766c}
+.start-date-feedback[data-date-state="invalid"]{color:#b42318;font-weight:600}
+.start-date-feedback[data-date-state="valid"]{color:#216245;font-weight:600}

@@ -3,6 +3,7 @@
   const form = document.getElementById('weekly-form');
   if (!form) return;
   const date = form.elements.namedItem('effective_date');
+  const dateFeedback = document.getElementById('start-date-feedback');
   const note = form.elements.namedItem('employee_note');
   const button = document.getElementById('weekly-submit');
   const credit = document.getElementById('weekly-credit');
@@ -23,11 +24,21 @@
   function validate() {
     const errors = [];
     let counted = 0;
-    if (!date.value) errors.push('Choose a start date.');
-    else if (!date.validity.valid || date.value < date.min || date.value > date.max) {
-      errors.push('Choose a start date within the allowed dates shown in the calendar.');
-    }
-    date.setAttribute('aria-invalid', String(!date.value || !date.validity.valid || date.value < date.min || date.value > date.max));
+    const label = value => {
+      const [year, month, day] = value.split('-').map(Number);
+      return new Date(year, month - 1, day).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+    };
+    let dateError = '';
+    if (!date.value) dateError = 'Choose a start date.';
+    else if (date.min && date.value < date.min) dateError = `Choose ${label(date.min)} or later. This date is too early.`;
+    else if (date.max && date.value > date.max) dateError = `Choose ${label(date.max)} or earlier. This date is too far ahead.`;
+    else if (!date.validity.valid) dateError = 'Choose a valid start date.';
+    const dateState = !date.value ? 'empty' : dateError ? 'invalid' : 'valid';
+    date.setAttribute('data-date-state', dateState);
+    date.setAttribute('aria-invalid', String(Boolean(dateError)));
+    dateFeedback.setAttribute('data-date-state', dateState);
+    dateFeedback.textContent = dateError || 'This start date is allowed.';
+    if (dateError) errors.push(dateError);
     for (const row of rows) {
       const mode = row.querySelector('[name$="_mode"]').value;
       const timed = mode === 'hours' || mode === 'unavailable';
