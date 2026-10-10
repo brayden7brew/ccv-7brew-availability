@@ -8,11 +8,11 @@ function element(value = '') {
   return {value, textContent: '', disabled: false, hidden: false, attributes: {},
     setAttribute(key, value) { this.attributes[key] = value; }};
 }
-function page(minimum = 900, blocked = false) {
+function page(minimum = 900, blocked = false, minimumOnly = false) {
   const date = Object.assign(element(), {min:'2026-10-15', max:'2027-10-02', validity:{valid:true}});
   const note = element();
   const button = element(); button.textContent = 'Send to my manager';
-  const dateFeedback = element(), credit = element(), feedback = element(), events = {}, windowEvents = {};
+  const feedbackBox = element(), noteError = element(), dateFeedback = element(), credit = element(), feedback = element(), events = {}, windowEvents = {};
   const rows = Array.from({length:7}, (_,i) => {
     const fields = {mode:element('none'),start:element(),end:element(),error:element()};
     fields.end.options = [element(), ...Array.from({length:73}, (_,n) => {
@@ -23,13 +23,13 @@ function page(minimum = 900, blocked = false) {
     return {fields, periods:[period], querySelectorAll() { return this.periods; }, dataset:{day:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][i]},
       querySelector(selector) { if (selector === '.add-period') return element(); return fields[selector === '.day-error' ? 'error' : selector.match(/_(mode|start|end)/)[1]]; }};
   });
-  const form = {dataset:{minimumMinutes:String(minimum),limitBlocked:String(blocked)},
+  const form = {dataset:{minimumOnlyFeedback:String(minimumOnly),minimumMinutes:String(minimum),limitBlocked:String(blocked)},
     elements:{namedItem(name) { return name === 'effective_date' ? date : note; }},
     querySelectorAll() { return rows; }, addEventListener(event, handler) { events[event] = handler; }};
-  const ids = {'start-date-feedback':dateFeedback,'weekly-form':form,'weekly-submit':button,'weekly-credit':credit,'weekly-errors':feedback};
+  const ids = {'weekly-feedback':feedbackBox,'employee-note-error':noteError,'start-date-feedback':dateFeedback,'weekly-form':form,'weekly-submit':button,'weekly-credit':credit,'weekly-errors':feedback};
   runInNewContext(source, {document:{getElementById(id) { return ids[id]; }},
     window:{addEventListener(event, handler) { windowEvents[event] = handler; }}});
-  return {date,dateFeedback,note,button,credit,feedback,rows,change:events.change, input:events.input, restore:windowEvents.pageshow,
+  return {feedbackBox,noteError,date,dateFeedback,note,button,credit,feedback,rows,change:events.change, input:events.input, restore:windowEvents.pageshow,
     submit() { let prevented=false; events.submit({preventDefault(){prevented=true;}}); return prevented; },
     hours(i,start,end) { rows[i].fields.mode.value='hours'; rows[i].fields.start.value=start; rows[i].fields.end.value=end; events.change(); }};
 }
@@ -142,4 +142,26 @@ test('date feedback changes red to green and blocks early iPhone selections', ()
   p.date.value = ''; p.input();
   assert.equal(p.date.attributes['data-date-state'], 'empty');
   assert.equal(p.button.disabled, true);
+});
+
+test('employee minimum warning disappears once hours qualify, while other validation still blocks', () => {
+  const p = page(900, false, true);
+  assert.equal(p.feedbackBox.hidden, false);
+  assert.match(p.feedback.textContent, /Make 15 more hours/);
+  assert.doesNotMatch(p.feedback.textContent, /Choose a start date/);
+  p.hours(0, '05:00', '15:00');
+  p.hours(1, '05:00', '10:00');
+  assert.equal(p.feedbackBox.hidden, true);
+  assert.equal(p.button.disabled, true); // Missing date still blocks.
+  p.date.value = p.date.min; p.change();
+  assert.equal(p.button.disabled, false);
+  p.hours(1, '05:00', '09:45');
+  assert.equal(p.feedbackBox.hidden, false);
+  assert.match(p.feedback.textContent, /0.25 more hours/);
+  assert.equal(p.button.disabled, true);
+  const exempt = page(0, false, true);
+  assert.equal(exempt.feedbackBox.hidden, true);
+  exempt.date.value = exempt.date.min; exempt.note.value = 'x'.repeat(2001); exempt.input();
+  assert.equal(exempt.noteError.hidden, false);
+  assert.equal(exempt.button.disabled, true);
 });
