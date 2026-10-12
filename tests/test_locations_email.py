@@ -143,3 +143,62 @@ def test_secondary_only_queued_mail_is_cancelled(client,db,monkeypatch):
     db.expire_all()
     item=db.scalar(select(EmailOutbox).where(EmailOutbox.recipient_id==3))
     assert item.status=='cancelled' and 3 not in sent
+
+
+@pytest.mark.parametrize('target', [1, 3])
+def test_admin_can_mute_people_and_restore_future_notifications(client, db, monkeypatch, target):
+    from app.models import AdminAudit
+    enable(monkeypatch)
+    db.get(User,2).role='admin'
+    person=db.get(User,target)
+    person.notification_email=f'user{target}@example.com'
+    person.notification_locations=['South']
+    db.commit()
+    submit(client)
+    db.add(EmailOutbox(change_id=1,recipient_id=target,event='rejected',
+        recipient=person.notification_email,subject='Queued',body='Queued',status='retry'))
+    db.commit()
+    token=sign_in(client,'manager@test.local')
+    assert 'Save notifications' in client.get(f'/admin/users/{target}').text
+    response=client.post(f'/admin/users/{target}/notifications',data={'csrf':token})
+    assert response.status_code==200 and 'Notification settings saved.' in response.text
+    db.refresh(person)
+    assert not person.notifications_enabled and person.notification_locations==['South']
+    assert db.scalar(select(EmailOutbox).where(EmailOutbox.recipient_id==target)).status=='cancelled'
+    assert db.scalar(select(AdminAudit).where(AdminAudit.target_id==target)).details['event']=='person_notifications'
+    from app.notifications import wants_notifications
+    assert not wants_notifications(person,db.get(Change,1))
+    response=client.post(f'/admin/users/{target}/notifications',data={'csrf':token,'notifications_enabled':'on'})
+    assert response.status_code==200
+    db.refresh(person)
+    assert wants_notifications(person,db.get(Change,1))
+    assert db.scalar(select(EmailOutbox).where(EmailOutbox.recipient_id==target)).status=='cancelled'
+
+
+def test_person_notification_controls_require_admin_and_csrf(client,db):
+    for email in ['employee@test.local','manager@test.local']:
+        token=sign_in(client,email)
+        assert client.post('/admin/users/1/notifications',data={'csrf':token}).status_code==403
+    db.get(User,2).role='admin'; db.commit()
+    token=sign_in(client,'manager@test.local')
+    assert client.post('/admin/users/1/notifications',data={'csrf':'invalid'}).status_code==403
+    assert client.post('/admin/users/999/notifications',data={'csrf':token}).status_code==404
+    assert db.get(User,1).notifications_enabled
+
+
+def test_muted_employee_gets_no_decision_mail_and_worker_rechecks(client,db,monkeypatch):
+    enable(monkeypatch)
+    db.get(User,1).notification_email='employee@example.com'
+    db.get(User,1).notifications_enabled=False
+    db.commit()
+    submit(client)
+    decide(db,db.get(User,2),1,'reject','Please review',Fake())
+    assert not db.scalar(select(EmailOutbox).where(EmailOutbox.recipient_id==1))
+    db.add(EmailOutbox(change_id=1,recipient_id=1,event='rejected',
+        recipient='employee@example.com',subject='Queued earlier',body='Queued',status='queued'))
+    db.commit()
+    sent=[]
+    process_batch(sessionmaker(bind=db.get_bind(),expire_on_commit=False),lambda item:sent.append(item.id))
+    db.expire_all()
+    assert not sent
+    assert db.scalar(select(EmailOutbox).where(EmailOutbox.recipient_id==1)).status=='cancelled'

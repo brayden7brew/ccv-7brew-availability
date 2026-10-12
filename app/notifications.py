@@ -12,6 +12,8 @@ def valid_email(value):
 
 
 def wants_notifications(user, change):
+    if not user.notifications_enabled:
+        return False
     if user.role != 'admin':
         return True
     return user.notifications_enabled and (user.notification_locations is None or

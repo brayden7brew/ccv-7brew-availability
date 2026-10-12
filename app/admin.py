@@ -266,3 +266,28 @@ async def grant_extra_request(request: Request, user_id: int, db=Depends(get_db)
         'event':'extra_request_granted', 'remaining_credits':person.extra_request_credits}))
     db.commit()
     return RedirectResponse(f'/admin/users/{user_id}?'+directory_filters(request)[1]+'&saved=1',303)
+
+
+@router.post('/admin/users/{user_id}/notifications')
+async def person_notifications(request: Request, user_id: int, db=Depends(get_db)):
+    actor = require_admin(request, db)
+    form = await request.form(max_fields=2)
+    csrf(request, form.get('csrf'))
+    lock_admin_changes(db)
+    db.refresh(actor)
+    if actor.role != 'admin' or not actor.active:
+        raise HTTPException(403, 'Administrator access is required.')
+    person = db.scalar(select(User).where(User.id == user_id).with_for_update().execution_options(populate_existing=True))
+    if not person:
+        raise HTTPException(404, 'Employee not found.')
+    before = person.notifications_enabled
+    person.notifications_enabled = form.get('notifications_enabled') == 'on'
+    if not person.notifications_enabled:
+        for item in db.scalars(select(EmailOutbox).where(
+                EmailOutbox.recipient_id == person.id,
+                EmailOutbox.status.in_(['queued', 'retry', 'missing_address']))):
+            item.status = 'cancelled'
+    db.add(AdminAudit(actor_id=actor.id, target_id=person.id, details={
+        'event':'person_notifications', 'before':before, 'after':person.notifications_enabled}))
+    db.commit()
+    return RedirectResponse(f'/admin/users/{user_id}?'+directory_filters(request)[1]+'&notifications_saved=1',303)
