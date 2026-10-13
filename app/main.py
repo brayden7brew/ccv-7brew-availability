@@ -338,7 +338,11 @@ def detail(request: Request, change_id: int, db=Depends(get_db)):
     if not change or not allowed(db, user, change): raise HTTPException(404, 'Request not found.')
     employee = db.get(User, change.employee_id)
     history = db.scalars(select(Audit).where(Audit.change_id == change.id).order_by(Audit.id)).all()
-    actor_ids = {entry.actor_id for entry in history if entry.actor_id}
+    if user.role != 'admin':
+        history = [dict(event=entry.event, created=entry.created)
+                   for entry in history
+                   if entry.event in ('submitted', 'submitted_direct', 'approved', 'rejected')]
+    actor_ids = {entry.actor_id for entry in history if entry.actor_id} if user.role == 'admin' else set()
     actor_names = dict(db.execute(select(User.id, User.name).where(User.id.in_(actor_ids))).all())
     managed_ids = set(db.scalars(select(ManagedEvent.event_id).where(
         ManagedEvent.employee_id == change.employee_id, ManagedEvent.active.is_(True))).all())
