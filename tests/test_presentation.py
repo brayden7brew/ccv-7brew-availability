@@ -26,4 +26,6 @@ def test_employee_sees_manager_note_without_raw_audit(client, db):
     assert 'Request denied' in html
     assert '68 hours count toward the weekly minimum' in html
     sign_in(client,'manager@test.local')
+    assert 'Technical details' not in client.get('/requests/1').text
+    db.get(User,2).role='admin'; db.commit()
     assert 'Technical details' in client.get('/requests/1').text
