@@ -23,7 +23,7 @@ def test_employee_sees_manager_note_without_raw_audit(client, db):
     assert 'Message from your manager' in html and 'Please add Monday.' in html
     assert '&lt;script&gt;' in html and '<script>' not in html
     assert 'Technical details' not in html and 'Actor #' not in html
-    assert 'Manager declined' in html
+    assert 'Request denied' in html
     assert '68 hours count toward the weekly minimum' in html
     sign_in(client,'manager@test.local')
     assert 'Technical details' in client.get('/requests/1').text
