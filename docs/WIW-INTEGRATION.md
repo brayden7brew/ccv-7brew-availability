@@ -26,3 +26,29 @@ A token authorized in a live customer account was not supplied. Contract verific
 ## Availability-read range limit
 
 On 2026-09-29 the test-site diagnostic confirmed WIW rejects ranges over 95 days with HTTP 400 / code 2002. The adapter now splits longer reads into contiguous 90-day UTC windows and combines results by event ID. Every window enforces employee/account ownership. A failed window or changed duplicate aborts the entire read; partial state cannot reach approval. This does not limit the repeating weekly schedule or introduce an employee end date.
+
+
+### Recurring availability handover and split-update recovery
+
+WIW PUT may return both an edited original series and a new series. When capping
+legacy availability, use a UTC `UNTIL` immediately before the approved start date,
+not `COUNT`: WIW can restart a count at the split date. Verify each returned record
+by GET and compare the complete finite occurrence set against the intended capped
+series, including local-time DST behavior, notes, type, and duplicate occurrences.
+Future-only legacy entries are deleted before new schedule creation; historical
+fragments are retained and excluded from portal-owned event tracking. Read back the
+complete replacement before marking a handover applied.
+
+For an initial approval stopped on its first legacy update, where one original
+series became exactly two and every pre-start-date occurrence is unchanged:
+
+```sh
+python -m app.cli repair-split-update --id 12 --manager-email brayden@rva7brew.com
+```
+
+This is a live repair, not an inspection. It checks approval, employee mapping,
+future effective date, the operation journal, and current WIW state, then journals
+an absolute-date repair plan and verifies the final result. Changed earlier hours,
+prior recovery attempts, other unresolved writes, or an existing approved portal
+timeline stop it without writes. Never force status to applied or rerun after an
+uncertain repair; inspect the new journal first.

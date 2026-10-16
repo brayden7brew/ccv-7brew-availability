@@ -93,11 +93,11 @@ def test_default_live_handover_and_later_approval(client, db, monkeypatch):
     assert 'Approving automatically replaces' in response.text
     assert "script-src 'self'" in response.headers['content-security-policy']
     change=decide(db,db.get(User,2),1,'approve','',provider)
-    assert change.status=='applied'
+    assert change.status=='applied', [e.details for e in db.scalars(select(Audit).where(Audit.event=='write_uncertain'))]
     assert provider.calls[0]['action']=='update'
     assert all(op.get('rfc_dates') for op in provider.calls if op['action'] in ('create','update'))
     assert provider.events[77]['start_time']==original['start_time']
-    assert 'COUNT=' in provider.events[77]['recurrence']
+    assert 'UNTIL=' in provider.events[77]['recurrence']
     assert provider.events[79] == past
     assert 78 not in provider.events
     assert [op['action'] for op in provider.calls[:2]] == ['update','delete']

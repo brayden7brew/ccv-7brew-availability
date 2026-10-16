@@ -1,5 +1,5 @@
 """Plan a dated handover without deleting earlier WIW availability."""
-from datetime import datetime, time
+from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from dateutil.parser import parse
 from dateutil.rrule import rrulestr
@@ -52,8 +52,12 @@ def handover(events, effective):
                 operations.append({'action':'delete','event_id':event['id']})
             else:
                 parts = [p for p in rule.split(';') if not p.startswith(('COUNT=', 'UNTIL='))]
-                payload['recurrence'] = ';'.join(parts + [f'COUNT={count}'])
-                operations.append({'action':'update','event_id':event['id'],'payload':payload})
+                # A count restarts when WIW splits an old series at today's boundary.
+                # An absolute cutoff survives that split without extending availability.
+                until = (cutoff.astimezone(timezone.utc) - timedelta(seconds=1)).strftime('%Y%m%dT%H%M%SZ')
+                payload['recurrence'] = ';'.join(parts + [f'UNTIL={until}'])
+                operations.append({'action':'update','event_id':event['id'],'payload':payload,
+                                   'verify_split': True})
                 retained.append({**event, **payload})
         except (ValueError, KeyError, TypeError, OverflowError) as exc:
             raise ValueError('Existing WIW availability cannot be safely split at this start date. Review the event in WIW before approving.') from exc

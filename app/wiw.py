@@ -173,15 +173,25 @@ class WIW:
             result = self.call('PUT', f"/2/availabilityevents/{operation['event_id']}", payload={
                 **wire_payload, 'user_id':change.wiw_user_id, 'account_id':self.cfg.wiw_account_id})
             events = result.get('availabilityevents')
-            if (not isinstance(events, list) or len(events) != 1
-                    or not isinstance(events[0], dict) or events[0].get('id') != operation['event_id']
-                    or events[0].get('user_id') != change.wiw_user_id
-                    or events[0].get('account_id') != self.cfg.wiw_account_id):
+            split = operation.get('verify_split', False)
+            if (not isinstance(events, list) or not events or len(events) > (2 if split else 1)
+                    or any(not isinstance(e, dict) or type(e.get('id')) is not int
+                           or e.get('user_id') != change.wiw_user_id
+                           or e.get('account_id') != self.cfg.wiw_account_id for e in events)
+                    or len({e['id'] for e in events}) != len(events)
+                    or operation['event_id'] not in {e['id'] for e in events}):
                 raise WIWError('WIW did not confirm the expected availability update.')
-            # A successful HTTP status alone does not prove that WIW capped the rule.
-            observed = self.get(operation['event_id'], change.wiw_user_id)
-            self.verify_payload(observed, operation['payload'])
-            result['availabilityevents'] = [observed]
+            observed = [self.get(e['id'], change.wiw_user_id) for e in events]
+            if split:
+                from .event_identity import verify_finite_replacement
+                try:
+                    verify_finite_replacement(observed, operation['payload'])
+                except (ValueError, TypeError, KeyError, OverflowError) as exc:
+                    raise WIWError('WIW split availability does not match the approved cutoff.',
+                                   reason='write_payload_mismatch') from exc
+            else:
+                self.verify_payload(observed[0], operation['payload'])
+            result['availabilityevents'] = observed
         elif operation['action'] == 'create':
             result = self.call('POST', '/2/availabilityevents', payload={
                 **wire_payload, 'user_id':change.wiw_user_id, 'account_id':self.cfg.wiw_account_id})

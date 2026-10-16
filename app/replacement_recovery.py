@@ -7,7 +7,7 @@ from .models import User, Change, Audit, ManagedEvent, WeeklySchedule, now
 from .workflow import allowed, audit, canonical
 from .weekly import event_plan, local_today, timeline
 from .legacy_availability import handover
-from .event_identity import event_signature
+from .event_identity import event_signature, in_read_window
 from .locations import assigned_locations
 from .wiw import WIWError
 
@@ -106,6 +106,8 @@ def recover_requested_schedule(db, actor, request_id, effective_date, provider, 
                 if isinstance(event, dict) and type(event.get('id')) is int: absent(event['id'])
         before = provider.read(change.wiw_user_id, change.read_start, change.read_end)
         edits, retained = handover(before['availabilityevents'], date.fromisoformat(effective_date))
+        for op in edits:
+            if op['action'] == 'update': op['rfc_dates'] = True
         payloads = event_plan([change.proposed])
         operations = [{'action':'create','payload':p,'rfc_dates':True} for p in payloads] + edits
         if canonical(provider.read(change.wiw_user_id, change.read_start, change.read_end)) != canonical(before):
@@ -118,6 +120,8 @@ def recover_requested_schedule(db, actor, request_id, effective_date, provider, 
     db.commit()
     def verify_state(expected):
         actual = provider.read(change.wiw_user_id, change.read_start, change.read_end)['availabilityevents']
+        actual = [e for e in actual if in_read_window(e, change.read_start, change.read_end)]
+        expected = [e for e in expected if in_read_window(e, change.read_start, change.read_end)]
         if Counter(map(event_signature, actual)) != Counter(map(event_signature, expected)):
             raise WIWError('WIW differs from the expected recovery state. Stop and inspect.', reason='recovery_state_mismatch')
         if {e['id'] for e in actual} != {e['id'] for e in expected}:
@@ -138,6 +142,8 @@ def recover_requested_schedule(db, actor, request_id, effective_date, provider, 
                 observed = provider.get(event['id'], change.wiw_user_id)
                 provider.verify_payload(observed, op['payload'])
                 created.append(observed)
+            elif op['action'] == 'update':
+                retained = [e for e in retained if e.get('id') != op['event_id']] + result['availabilityevents']
             elif op['action'] == 'delete':
                 try: provider.get(op['event_id'], change.wiw_user_id)
                 except WIWError as exc:
@@ -145,6 +151,8 @@ def recover_requested_schedule(db, actor, request_id, effective_date, provider, 
                 else: raise WIWError('Deleted event is still present.')
             audit(db, change, actor, 'operation_succeeded', {'index':index,'response':result,'recovery':True})
             db.commit()
+        audit(db, change, actor, 'handover_verified', {'retained_external_events':retained})
+        db.commit()
         verify_state(retained + created)
     except (WIWError, ValueError, KeyError, TypeError) as exc:
         change.status = 'needs_reconciliation'

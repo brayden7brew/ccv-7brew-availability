@@ -25,3 +25,54 @@ def event_signature(event):
     return (event['type'], start.astimezone(timezone.utc).isoformat(),
             end.astimezone(timezone.utc).isoformat(), all_day,
             tuple(sorted(rule.removeprefix('RRULE:').upper().split(';'))))
+
+
+def finite_occurrences(events, before=None):
+    """Compare complete finite series, or their prefix before a dated handover.
+
+    Expand in business local time, preserving DST and duplicate occurrences.
+    Never sample an infinite tail or round a timed interval.
+    """
+    from collections import Counter
+    from dateutil.rrule import rrulestr
+    result = Counter()
+    zone = ZoneInfo(settings().business_timezone)
+    for event in events:
+        signature = event_signature(event)
+        start = parse(signature[1]).astimezone(zone)
+        end = parse(signature[2]).astimezone(zone)
+        duration = end - start
+        rule = event.get('recurrence') or ''
+        if rule:
+            parts = rule.removeprefix('RRULE:').upper().split(';')
+            if before is None and not any(p.startswith(('COUNT=', 'UNTIL=')) for p in parts):
+                raise ValueError('Unbounded series cannot confirm a finite handover.')
+            occurrences = rrulestr(rule, dtstart=start)
+        else:
+            occurrences = [start]
+        for index, occurrence in enumerate(occurrences):
+            if index >= 10000:
+                raise ValueError('Series too large to verify safely.')
+            if before is not None and occurrence >= before:
+                break
+            finish = occurrence + duration
+            if before is not None:
+                finish = min(finish, before)
+            result[(signature[0], occurrence.astimezone(timezone.utc).isoformat(),
+                    finish.astimezone(timezone.utc).isoformat(), signature[3],
+                    event.get('notes') or '')] += 1
+    return result
+
+
+def verify_finite_replacement(events, payload):
+    if finite_occurrences(events) != finite_occurrences([payload]):
+        raise ValueError('Split availability does not preserve the complete approved date range.')
+
+
+def in_read_window(event, first, last):
+    begin, finish = parse(first), parse(last)
+    zone = ZoneInfo(settings().business_timezone)
+    if begin.tzinfo is None: begin = begin.replace(tzinfo=zone)
+    if finish.tzinfo is None: finish = finish.replace(tzinfo=zone)
+    return any(parse(key[1]) < finish and parse(key[2]) > begin
+               for key in finite_occurrences([event], before=finish))

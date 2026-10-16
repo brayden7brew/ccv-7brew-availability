@@ -54,10 +54,10 @@ def approve_weekly(db, actor, change, note, provider, replace_existing=False):
     audit(db, change, actor, 'approved', {'note':note,'dry_run':dry_run,'pre_write_state':current,
         'managed_event_snapshots':fresh, 'retained_external_events':retained, 'replace_existing':bool(legacy_operations), 'operations':operations, 'weekly_schedule':change.proposed})
     db.commit()
-    return dispatch_weekly(db, actor, change, operations, provider)
+    return dispatch_weekly(db, actor, change, operations, provider, preserved_events=retained if legacy_operations else None)
 
 
-def dispatch_weekly(db, actor, change, operations, provider, start_index=0, verify_complete=False, final_events=None):
+def dispatch_weekly(db, actor, change, operations, provider, start_index=0, verify_complete=False, final_events=None, preserved_events=None):
     from .workflow import audit
     managed = db.scalars(select(ManagedEvent).where(ManagedEvent.employee_id == change.employee_id,
         ManagedEvent.active.is_(True))).all()
@@ -80,18 +80,28 @@ def dispatch_weekly(db, actor, change, operations, provider, start_index=0, veri
                 event = result['availabilityevent']
                 db.add(ManagedEvent(employee_id=change.employee_id, event_id=event['id'], snapshot=event))
             elif operation['action'] == 'update':
+                if preserved_events is not None:
+                    preserved_events = [e for e in preserved_events if e.get('id') != operation['event_id']] + result['availabilityevents']
                 item = next((m for m in managed if m.event_id == operation['event_id']), None)
                 if item:
                     item.snapshot = result['availabilityevents'][0]
             audit(db, change, actor, 'operation_succeeded', {'index':index, 'response':result})
             db.commit()
-        if verify_complete:
+        if preserved_events is not None:
+            audit(db, change, actor, 'handover_verified', {'retained_external_events':preserved_events})
+            db.commit()
+        if verify_complete or preserved_events is not None:
             from collections import Counter
-            from .event_identity import event_signature
+            from .event_identity import event_signature, in_read_window
             try:
                 current = provider.read(change.wiw_user_id, change.read_start, change.read_end)
                 expected = final_events if final_events is not None else [op['payload'] for op in operations if op['action'] == 'create']
-                if Counter(map(event_signature, current['availabilityevents'])) != Counter(map(event_signature, expected)):
+                actual = current['availabilityevents']
+                if preserved_events is not None:
+                    expected = preserved_events + expected
+                    actual = [e for e in actual if in_read_window(e, change.read_start, change.read_end)]
+                    expected = [e for e in expected if in_read_window(e, change.read_start, change.read_end)]
+                if Counter(map(event_signature, actual)) != Counter(map(event_signature, expected)):
                     raise WIWError('WIW does not match the complete approved schedule.')
             except (WIWError, ValueError, TypeError, KeyError) as exc:
                 change.status = 'needs_reconciliation'
@@ -126,11 +136,17 @@ def reconcile_weekly(db, actor, change, outcome, note, provider):
         snapshots = approval.details['managed_event_snapshots']
     else:
         retained = approval.details.get('retained_external_events', [])
+        verified = db.scalars(select(Audit).where(Audit.change_id == change.id,
+            Audit.event == 'handover_verified', Audit.id > approval.id).order_by(Audit.id.desc())).first()
+        if verified:
+            retained = verified.details['retained_external_events']
         expected = retained + approval.details.get('final_managed_payloads',
             [op['payload'] for op in approval.details['operations'] if op['action']=='create'])
-        from .event_identity import event_signature as fingerprint
+        from .event_identity import event_signature as fingerprint, in_read_window
         from collections import Counter
-        if Counter(map(fingerprint,current['availabilityevents'])) != Counter(map(fingerprint,expected)):
+        expected = [e for e in expected if in_read_window(e, change.read_start, change.read_end)]
+        actual = [e for e in current['availabilityevents'] if in_read_window(e, change.read_start, change.read_end)]
+        if Counter(map(fingerprint,actual)) != Counter(map(fingerprint,expected)):
             raise ValueError('WIW does not match the complete approved weekly plan. Leave this request unresolved until every planned event is verified.')
         retained_ids = {event['id'] for event in retained}
         snapshots = [event for event in current['availabilityevents'] if event['id'] not in retained_ids]
