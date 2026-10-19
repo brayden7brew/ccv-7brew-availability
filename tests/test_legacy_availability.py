@@ -88,9 +88,10 @@ def test_default_live_handover_and_later_approval(client, db, monkeypatch):
     submit(client)
     sign_in(client,'manager@test.local')
     response=client.get('/requests/1')
-    assert 'Existing When I Work availability' in response.text
+    assert 'Existing When I Work availability' not in response.text
     assert 'name="replace_existing"' not in response.text
-    assert 'Approving automatically replaces' in response.text
+    assert 'Review this request' in response.text
+    assert 'Requested unavailable hours' in response.text
     assert "script-src 'self'" in response.headers['content-security-policy']
     change=decide(db,db.get(User,2),1,'approve','',provider)
     assert change.status=='applied', [e.details for e in db.scalars(select(Audit).where(Audit.event=='write_uncertain'))]
