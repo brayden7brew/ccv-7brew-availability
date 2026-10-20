@@ -5,6 +5,11 @@ from .models import User, Scope, Change, Audit
 from .wiw import WIW
 from .locations import assigned_locations
 
+class RequestAlreadyDecided(HTTPException):
+    def __init__(self):
+        super().__init__(409, 'This request has already been decided.')
+
+
 def audit(db, change, actor, event, details):
     db.add(Audit(change_id=change.id, actor_id=actor.id if actor else None, event=event, details=details))
     if event in ('submitted','approved','rejected'):
@@ -33,7 +38,7 @@ def decide(db, actor, change_id, decision, note, provider=None, replace_existing
     employee = db.scalar(select(User).where(User.id == existing.employee_id).with_for_update())
     change = db.scalar(select(Change).where(Change.id == change_id).with_for_update().execution_options(populate_existing=True))
     if change.status != 'pending':
-        raise HTTPException(409, 'This request has already been decided.')
+        raise RequestAlreadyDecided()
     if decision not in ('approve', 'reject') or len(note) > 2000 or (decision == 'reject' and not note.strip()):
         raise HTTPException(422, 'Choose approve/reject and include a reason when rejecting.')
     if employee.location != change.location or not employee.active or employee.wiw_user_id != change.wiw_user_id or set(assigned_locations(employee)) != set(assigned_locations(change)):

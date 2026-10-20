@@ -351,5 +351,11 @@ async def decision(request: Request, change_id: int, db=Depends(get_db)):
     user = current_user(request, db)
     form = await request.form(max_fields=10)
     csrf(request, form.get('csrf'))
-    await run_in_threadpool(decide, db, user, change_id, form.get('decision'), str(form.get('note','')).strip(), replace_existing=form.get('replace_existing') == 'yes')
+    from .workflow import RequestAlreadyDecided
+    try:
+        await run_in_threadpool(decide, db, user, change_id, form.get('decision'), str(form.get('note','')).strip(), replace_existing=form.get('replace_existing') == 'yes')
+    except RequestAlreadyDecided:
+        # A repeated click must not repeat WIW writes or look like a failed approval.
+        db.rollback()
+
     return RedirectResponse(f'/requests/{change_id}', 303)
