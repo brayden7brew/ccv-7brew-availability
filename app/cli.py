@@ -94,7 +94,7 @@ def main():
             db.execute(delete(LoginSession).where(LoginSession.expires < now()))
             db.execute(delete(LoginAttempt).where(LoginAttempt.created < now()-timedelta(days=1)))
         elif args.command == 'unresolved':
-            for c in db.scalars(select(Change).where(Change.status.in_(['applying','needs_reconciliation']))):
+            for c in db.scalars(select(Change).where(Change.status.in_(['queued','preparing','approval_failed','applying','needs_reconciliation']))):
                 print(f'#{c.id} employee={c.employee_id} status={c.status}')
         elif args.command == 'inspect-request':
             from .models import Audit

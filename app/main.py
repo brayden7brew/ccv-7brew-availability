@@ -189,7 +189,7 @@ def dashboard(request: Request, page_number: int = 1, db=Depends(get_db)):
     changes = db.scalars(select(Change).where(or_(Change.employee_id == user.id,
         Change.location.in_(locations))).order_by(Change.created.desc()).offset((page_number-1)*50).limit(50)).all()
     names = {u.id: u.name for u in db.scalars(select(User).where(User.id.in_({c.employee_id for c in changes}))).all()}
-    return page(request, 'dashboard.html', user=user, changes=changes, names=names, page_number=page_number, usage=request_usage(db, user.id),
+    return page(request, 'dashboard.html', processing=any(c.status in ('queued','preparing','applying') for c in changes), user=user, changes=changes, names=names, page_number=page_number, usage=request_usage(db, user.id),
         employee_usage={i:request_usage(db, i) for i in names})
 
 def date_range(start=None, end=None):
@@ -289,7 +289,7 @@ async def submit(request: Request, db=Depends(get_db)):
     except HTTPException as exc:
         return invalid(exc.detail, exc.status_code)
     if user.role in ('manager','admin') and db.scalar(select(Change.id).where(
-            Change.employee_id == user.id, Change.status.in_(['applying','needs_reconciliation']))):
+            Change.employee_id == user.id, Change.status.in_(['queued','preparing','applying','needs_reconciliation']))):
         return invalid('An earlier availability update needs attention. Ask your administrator to resolve it before saving another update.', 409)
     usage = request_usage(db, user.id)
     if usage['blocked']:
@@ -339,9 +339,11 @@ def detail(request: Request, change_id: int, db=Depends(get_db)):
     employee = db.get(User, change.employee_id)
     history = db.scalars(select(Audit).where(Audit.change_id == change.id).order_by(Audit.id)).all()
     if user.role != 'admin':
+        if any(entry.event == 'approved' for entry in history):
+            history = [entry for entry in history if entry.event != 'approval_queued']
         history = [dict(event=entry.event, created=entry.created)
                    for entry in history
-                   if entry.event in ('submitted', 'submitted_direct', 'approved', 'rejected')]
+                   if entry.event in ('submitted', 'submitted_direct', 'approved', 'rejected', 'approval_queued')]
     actor_ids = {entry.actor_id for entry in history if entry.actor_id} if user.role == 'admin' else set()
     actor_names = dict(db.execute(select(User.id, User.name).where(User.id.in_(actor_ids))).all())
     return page(request, 'detail.html', user=user, change=change, employee=employee, history=history, actor_names=actor_names, days=DAYS, usage=request_usage(db, employee.id))
@@ -353,9 +355,9 @@ async def decision(request: Request, change_id: int, db=Depends(get_db)):
     csrf(request, form.get('csrf'))
     from .workflow import RequestAlreadyDecided
     try:
-        await run_in_threadpool(decide, db, user, change_id, form.get('decision'), str(form.get('note','')).strip(), replace_existing=form.get('replace_existing') == 'yes')
+        await run_in_threadpool(decide, db, user, change_id, form.get('decision'), str(form.get('note','')).strip(), replace_existing=form.get('replace_existing') == 'yes', enqueue=True)
     except RequestAlreadyDecided:
         # A repeated click must not repeat WIW writes or look like a failed approval.
         db.rollback()
 
-    return RedirectResponse(f'/requests/{change_id}', 303)
+    return RedirectResponse('/requests', 303)

@@ -52,3 +52,18 @@ an absolute-date repair plan and verifies the final result. Changed earlier hour
 prior recovery attempts, other unresolved writes, or an existing approved portal
 timeline stop it without writes. Never force status to applied or rerun after an
 uncertain repair; inspect the new journal first.
+
+### Background manager approvals
+
+The web decision endpoint commits `queued` and redirects to the requests list.
+The existing `python -m app.mailer` worker consumes approvals even when email is
+disabled. Deploy both the web service and worker against the same database and
+WIW mode. The requests list refreshes while visible approvals are processing.
+
+Workers lock employee then request, recheck manager permission and employee
+mapping, and commit `preparing` before remote reads. Existing operation journals
+and final WIW verification still govern success. Only `queued` requests are
+claimed: interrupted `preparing` or `applying` requests require inspection, never
+an automatic replay. Pre-write failures become `approval_failed`; ambiguous
+writes remain `needs_reconciliation`. Use `inspect-request` to investigate before
+choosing an existing recovery command. Do not reset statuses to force a retry.

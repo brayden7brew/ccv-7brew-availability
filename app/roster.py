@@ -91,7 +91,7 @@ def assigned_schedule_pair(record, schedules, current_primary=''):
 def sync_locations(db, actor, person, record, schedules):
     pair = assigned_schedule_pair(record, schedules, person.location)
     pending = db.scalar(select(Change.id).where(Change.employee_id == person.id,
-        Change.status.in_(['pending', 'applying', 'needs_reconciliation'])))
+        Change.status.in_(['pending', 'queued', 'preparing', 'applying', 'needs_reconciliation'])))
     before = [person.location, person.secondary_location]
     review = pair is None or bool(pending)
     if not review:

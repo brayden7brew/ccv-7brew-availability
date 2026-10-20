@@ -134,8 +134,8 @@ def test_manager_web_decision(client, db):
     submit(client)
     csrf = sign_in(client,'manager@test.local')
     response = client.post('/requests/1/decision',data={'csrf':csrf,'decision':'approve','note':'OK'})
-    assert response.status_code == 200 and 'Approved · test only' in response.text
-    assert db.get(Change,1).status == 'approved_dry_run'
+    assert response.status_code == 200 and 'Approved · waiting to sync' in response.text
+    assert db.get(Change,1).status == 'queued'
 
 
 def test_invalid_dates_and_escaping(client):

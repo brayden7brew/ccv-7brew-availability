@@ -25,8 +25,7 @@ def allowed(db, user, change):
 def canonical(state):
     return json.dumps(sorted(state['availabilityevents'], key=lambda x: x['id']), sort_keys=True)
 
-def decide(db, actor, change_id, decision, note, provider=None, replace_existing=False):
-    provider = provider or WIW()
+def decide(db, actor, change_id, decision, note, provider=None, replace_existing=False, *, enqueue=False, run_queued=False):
     # Employee row serializes decisions across all of this employee's requests in Postgres.
     existing = db.get(Change, change_id)
     if not existing or not allowed(db, actor, existing):
@@ -37,7 +36,7 @@ def decide(db, actor, change_id, decision, note, provider=None, replace_existing
         raise HTTPException(403, 'You cannot reject your own availability.')
     employee = db.scalar(select(User).where(User.id == existing.employee_id).with_for_update())
     change = db.scalar(select(Change).where(Change.id == change_id).with_for_update().execution_options(populate_existing=True))
-    if change.status != 'pending':
+    if change.status != ('queued' if run_queued else 'pending'):
         raise RequestAlreadyDecided()
     if decision not in ('approve', 'reject') or len(note) > 2000 or (decision == 'reject' and not note.strip()):
         raise HTTPException(422, 'Choose approve/reject and include a reason when rejecting.')
@@ -51,8 +50,24 @@ def decide(db, actor, change_id, decision, note, provider=None, replace_existing
     if change.action != 'weekly':
         raise HTTPException(409, 'Please resubmit this older request using the weekly availability form.')
     unresolved = db.scalar(select(Change.id).where(Change.employee_id == employee.id,
-        Change.status.in_(['applying', 'needs_reconciliation'])))
+        Change.id != change.id, Change.status.in_(['queued', 'preparing', 'applying', 'needs_reconciliation'])))
     if unresolved:
         raise HTTPException(409, 'An earlier write needs reconciliation before another approval.')
+    from .config import settings
+    if enqueue:
+        change.status, change.manager_id, change.manager_note = 'queued', actor.id, note
+        change.dry_run = settings().dry_run
+        audit(db, change, actor, 'approval_queued', {'note':note, 'dry_run':change.dry_run})
+        db.commit()
+        return change
+    if run_queued:
+        if (change.manager_id != actor.id or change.dry_run != settings().dry_run
+                or (not change.dry_run and settings().wiw_mode != 'live')):
+            raise HTTPException(409, 'Approval owner or server mode changed while queued.')
+        # Commit the claim before remote calls. A crashed worker must never replay writes.
+        change.status = 'preparing'
+        audit(db, change, actor, 'approval_started', {})
+        db.commit()
+    provider = provider or WIW()
     from .weekly_workflow import approve_weekly
     return approve_weekly(db, actor, change, note, provider, replace_existing=replace_existing)

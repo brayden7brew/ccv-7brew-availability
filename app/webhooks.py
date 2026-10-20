@@ -101,7 +101,7 @@ def sync_employee(db,actor,api,uid,schedules):
         person.active=False
         db.execute(delete(LoginSession).where(LoginSession.user_id==person.id))
         db.execute(delete(PortalSetup).where(PortalSetup.user_id==person.id))
-    pending=db.scalar(select(Change.id).where(Change.employee_id==person.id,Change.status.in_(['pending','applying','needs_reconciliation'])))
+    pending=db.scalar(select(Change.id).where(Change.employee_id==person.id,Change.status.in_(['pending','queued','preparing','applying','needs_reconciliation'])))
     routing_review=not routing_valid or bool(pending)
     if routing_valid and not pending:
         person.location,person.secondary_location=pair

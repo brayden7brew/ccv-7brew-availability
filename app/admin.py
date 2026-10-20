@@ -115,7 +115,7 @@ async def update_user(request: Request, user_id: int, db=Depends(get_db)):
     elif role == 'manager' and not scopes:
         raise HTTPException(422, 'Assign at least one approval location to a manager.')
     if (location != target.location or secondary != target.secondary_location) and db.scalar(select(Change.id).where(Change.employee_id==target.id,
-            Change.status.in_(['pending','applying','needs_reconciliation']))):
+            Change.status.in_(['pending','queued','preparing','applying','needs_reconciliation']))):
         raise HTTPException(409, 'Resolve this employee’s pending or unconfirmed requests before changing their approval location.')
     before = dict(role=target.role, location=target.location, secondary_location=target.secondary_location, notification_email=target.notification_email,
         scopes=list(db.scalars(select(Scope.location).where(Scope.manager_id==target.id))))

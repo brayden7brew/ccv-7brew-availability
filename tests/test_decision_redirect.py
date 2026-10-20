@@ -4,7 +4,7 @@ from sqlalchemy import select
 from test_portal import submit, sign_in
 
 
-@pytest.mark.parametrize('status', ['applied','applying','needs_reconciliation','rejected','approved_dry_run','conflict'])
+@pytest.mark.parametrize('status', ['applied','applying','needs_reconciliation','rejected','approved_dry_run','conflict','queued','preparing','approval_failed'])
 def test_repeated_decision_redirects_to_real_status_without_writes(client, db, monkeypatch, status):
     submit(client)
     change=db.get(Change,1)
@@ -17,7 +17,7 @@ def test_repeated_decision_redirects_to_real_status_without_writes(client, db, m
     monkeypatch.setattr('app.wiw.WIW.read',unexpected)
     monkeypatch.setattr('app.wiw.WIW.weekly_operation',unexpected)
     response=client.post('/requests/1/decision',data={'csrf':csrf,'decision':'approve','note':''},follow_redirects=False)
-    assert response.status_code==303 and response.headers['location']=='/requests/1'
+    assert response.status_code==303 and response.headers['location']=='/requests'
     assert db.get(Change,1).status==status
     assert len(db.scalars(select(Audit)).all())==before
     assert client.get(response.headers['location']).status_code==200

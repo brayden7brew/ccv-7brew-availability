@@ -76,13 +76,14 @@ def main():
     parser.add_argument('--once',action='store_true')
     args=parser.parse_args()
     if not settings().email_enabled:
-        print('Email sending is disabled; worker will remain idle until configured and restarted.', flush=True)
-        if args.once: return
+        print('Email sending is disabled; approvals and employee updates remain active.', flush=True)
     while True:
+        from .approval_worker import process_approval
         from .webhooks import process_webhooks
+        process_approval()
         process_webhooks()
         process_batch()
         if args.once: break
-        time.sleep(30)
+        time.sleep(5)
 
 if __name__=='__main__': main()

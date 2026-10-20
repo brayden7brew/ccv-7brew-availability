@@ -39,7 +39,7 @@ def repair_split_update(db, actor, change_id, provider):
                                                        ManagedEvent.active.is_(True)))):
         raise ValueError('Recovery is limited to an initial schedule without managed events.')
     if db.scalar(select(Change.id).where(Change.employee_id == employee.id,
-            Change.id != change.id, Change.status.in_(['applying', 'needs_reconciliation']))):
+            Change.id != change.id, Change.status.in_(['queued', 'preparing', 'applying', 'needs_reconciliation']))):
         raise ValueError('Another unresolved approval exists for this employee.')
     entries = db.scalars(select(Audit).where(Audit.change_id == change.id).order_by(Audit.id)).all()
     approvals = [e for e in entries if e.event in ('approved', 'recovery_plan', 'recovery_verified')]
