@@ -18,7 +18,8 @@ def require_admin(request, db):
 
 def directory_filters(request):
     from urllib.parse import urlencode
-    values={k:request.query_params.get(k,'').strip()[:254] for k in ('q','location','role','status','p')}
+    values={k:request.query_params.get(k,'').strip()[:254] for k in ('q','location','role','show_disabled','p')}
+    values['show_disabled'] = '1' if values['show_disabled'] == '1' else ''
     return values, urlencode({k:v for k,v in values.items() if v})
 
 @router.get('/admin')
@@ -34,7 +35,7 @@ def admin_page(request: Request, db=Depends(get_db)):
     if filters['location']:
         conditions.append(or_(User.location==filters['location'],User.secondary_location==filters['location']))
     if filters['role'] in ('employee','manager','admin'): conditions.append(User.role==filters['role'])
-    if filters['status'] in ('active','disabled'): conditions.append(User.active.is_(filters['status']=='active'))
+    if not filters['show_disabled']: conditions.append(User.active.is_(True))
     total=db.scalar(select(func.count()).select_from(User).where(*conditions))
     pages=max(1,(total+24)//25)
     try: number=max(1,min(int(filters['p'] or 1),pages))

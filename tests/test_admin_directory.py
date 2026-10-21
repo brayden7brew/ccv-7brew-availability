@@ -36,3 +36,38 @@ def test_detail_access_and_return_context(client,db):
     assert response.url.path=='/admin/users/1'
     assert response.url.params['q']=='employee'
     assert 'Access saved.' in response.text
+
+
+def test_disabled_people_hidden_until_checkbox_selected(client,db):
+    db.get(User,2).role='admin'
+    db.get(User,1).active=False
+    db.commit();csrf=sign_in(client,'manager@test.local')
+    default=client.get('/admin')
+    assert '2 people found' in default.text
+    assert '/admin/users/1?' not in default.text
+    assert 'Show disabled users' in default.text
+    assert 'name="status"' not in default.text
+    assert 'No matching employees' in client.get('/admin?q=employee').text
+    included=client.get('/admin?q=employee&location=North&role=employee&show_disabled=1')
+    assert '1 person found' in included.text and '/admin/users/1?' in included.text
+    assert 'value="1" checked' in included.text
+    context='q=employee&location=North&show_disabled=1&p=2'
+    detail=client.get('/admin/users/1?'+context)
+    assert 'show_disabled=1&amp;p=2' in detail.text
+    saved=client.post('/admin/users/1?'+context,data={'csrf':csrf,'role':'employee',
+        'location':'North','notification_email':''})
+    assert saved.url.params['show_disabled']=='1'
+    assert 'No matching employees' in client.get('/admin?q=employee&show_disabled=0').text
+
+
+def test_disabled_checkbox_persists_on_pagination(client,db):
+    db.get(User,2).role='admin'
+    for i in range(26):
+        db.add(User(name=f'Disabled {i}',email=f'disabled{i}@example.com',password_hash='!',
+                    wiw_user_id=1000+i,role='employee',location='North',active=False))
+    db.commit();sign_in(client,'manager@test.local')
+    page=client.get('/admin?q=Disabled&show_disabled=1')
+    assert '26 people found' in page.text
+    assert 'q=Disabled&amp;show_disabled=1&amp;p=2' in page.text
+    last=client.get('/admin?q=Disabled&show_disabled=1&p=2')
+    assert last.text.count('class="person-row"')==1

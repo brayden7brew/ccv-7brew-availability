@@ -41,3 +41,5 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .start-date-feedback{margin-top:8px;font-size:.9rem;color:#64766c}
 .start-date-feedback[data-date-state="invalid"]{color:#b42318;font-weight:600}
 .start-date-feedback[data-date-state="valid"]{color:#216245;font-weight:600}
+
+.directory-filters .directory-show-disabled{margin-top:10px;font-size:.9rem}
