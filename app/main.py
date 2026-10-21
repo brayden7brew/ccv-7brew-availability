@@ -186,7 +186,8 @@ def dashboard(request: Request, page_number: int = 1, db=Depends(get_db)):
     user = current_user(request, db)
     if page_number < 1 or page_number > 100000: raise HTTPException(422, 'Invalid page.')
     locations = list(db.scalars(select(Scope.location).where(Scope.manager_id == user.id))) if user.role in ('manager','admin') else []
-    changes = db.scalars(select(Change).where(or_(Change.employee_id == user.id,
+    changes = db.scalars(select(Change).where(~select(Audit.id).where(
+        Audit.change_id == Change.id, Audit.event == 'employee_archived').exists(), or_(Change.employee_id == user.id,
         Change.location.in_(locations))).order_by(Change.created.desc()).offset((page_number-1)*50).limit(50)).all()
     names = {u.id: u.name for u in db.scalars(select(User).where(User.id.in_({c.employee_id for c in changes}))).all()}
     return page(request, 'dashboard.html', processing=any(c.status in ('queued','preparing','applying') for c in changes), user=user, changes=changes, names=names, page_number=page_number, usage=request_usage(db, user.id),

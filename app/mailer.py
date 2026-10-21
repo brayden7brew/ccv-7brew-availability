@@ -46,8 +46,9 @@ def process_batch(factory=SessionLocal,sender=send_email):
             if not item: break
             user=db.get(User,item.recipient_id)
             change=db.get(Change,item.change_id)
+            employee=db.get(User,change.employee_id) if change else None
             # Recheck current permission so revoked managers never get queued notifications.
-            permitted=bool(user and user.active and change and wants_notifications(user, change))
+            permitted=bool(user and user.active and employee and employee.active and change and wants_notifications(user, change))
             if permitted and item.event=='submitted':
                 permitted=user.role in ('manager','admin') and user.id!=change.employee_id and bool(db.scalar(select(Scope.id).where(
                     Scope.manager_id==user.id,Scope.location == change.location))) and change.status=='pending'
@@ -80,8 +81,8 @@ def main():
     while True:
         from .approval_worker import process_approval
         from .webhooks import process_webhooks
-        process_approval()
         process_webhooks()
+        process_approval()
         process_batch()
         if args.once: break
         time.sleep(5)

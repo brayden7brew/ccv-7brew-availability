@@ -6,11 +6,11 @@ import json
 import logging
 from datetime import timedelta
 from fastapi import APIRouter, Request, Depends, HTTPException
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, update
 from sqlalchemy.exc import IntegrityError
 from .config import settings
 from .db import get_db, SessionLocal
-from .models import WebhookBatch, User, Change, LoginSession, PortalSetup, AdminAudit, now
+from .models import WebhookBatch, User, Change, LoginSession, PortalSetup, AdminAudit, Audit, EmailOutbox, now
 from .wiw import WIW, WIWError
 from .locations import lock_admin_changes
 from .notifications import valid_email
@@ -101,6 +101,25 @@ def sync_employee(db,actor,api,uid,schedules):
         person.active=False
         db.execute(delete(LoginSession).where(LoginSession.user_id==person.id))
         db.execute(delete(PortalSetup).where(PortalSetup.user_id==person.id))
+    if record['is_deleted']:
+        # Keep completed/uncertain write journals intact, but hide every archived
+        # employee request from the normal inbox. This event sends no email.
+        changes=db.scalars(select(Change).where(Change.employee_id==person.id)
+                           .with_for_update()).all()
+        for change in changes:
+            already_archived=db.scalar(select(Audit.id).where(
+                Audit.change_id==change.id, Audit.event=='employee_archived'))
+            if not already_archived:
+                db.add(Audit(change_id=change.id,actor_id=actor.id,event='employee_archived',
+                             details={'previous_status':change.status,'source':'wiw'}))
+            if change.status in ('pending','queued'):
+                change.status='cancelled_archived'
+        # Suppress unsent messages both to the employee and about their requests.
+        db.execute(update(EmailOutbox).where(
+            ((EmailOutbox.recipient_id==person.id) |
+             EmailOutbox.change_id.in_([c.id for c in changes])),
+            EmailOutbox.status.in_(['queued','retry','missing_address'])
+        ).values(status='cancelled'))
     pending=db.scalar(select(Change.id).where(Change.employee_id==person.id,Change.status.in_(['pending','queued','preparing','applying','needs_reconciliation'])))
     routing_review=not routing_valid or bool(pending)
     if routing_valid and not pending:
