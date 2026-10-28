@@ -245,3 +245,15 @@ def test_two_postgres_workers_do_not_repeat_time_off(client,db,pilot,monkeypatch
         finally: release.set()
         assert first.result(10)==1
     assert len(api.writes)==1
+
+
+def test_unrelated_period_does_not_require_wiw_capacity_read(client,db,pilot,monkeypatch):
+    blackout(db,0,period='morning')
+    class Unreachable(API):
+        def read(self,*args): raise AssertionError('Unrelated period must not read WIW')
+        def call(self,*args,**kwargs): raise AssertionError('Unrelated period must not read WIW')
+    monkeypatch.setattr('app.time_off.WIW',Unreachable)
+    monkeypatch.setattr(settings(),'wiw_mode','live')
+    csrf=sign_in(client);payload=data(csrf);payload.pop('full_day')
+    payload.update({'from':'12:00','to':'17:00'})
+    assert client.post('/time-off',data=payload).status_code==200

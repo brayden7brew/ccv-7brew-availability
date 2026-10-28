@@ -74,12 +74,17 @@ def parse_form(form):
     return {'start':start.isoformat(),'end':end.isoformat(),'full_day':full},reason
 
 
-def blocked_people(db,api,blackout,external,cache):
-    """Count distinct active primary-stand people with any unavailable overlap."""
+def blackout_interval(blackout):
     zone=ZoneInfo(settings().business_timezone)
     begin,finish,_=PERIODS[blackout.period]
     if blackout.period=='evening': finish=blackout.evening_end
-    a=datetime.combine(blackout.day,time(begin),zone);b=a.replace(hour=finish)
+    a=datetime.combine(blackout.day,time(begin),zone)
+    return a,a.replace(hour=finish)
+
+
+def blocked_people(db,api,blackout,external,cache):
+    """Count distinct active primary-stand people with any unavailable overlap."""
+    a,b=blackout_interval(blackout)
     people=list(db.scalars(select(User).where(User.active.is_(True),User.location==blackout.location)))
     ids={p.id for p in people};wid={p.wiw_user_id:p.id for p in people};blocked=set()
     from .availability_preview import preview
@@ -115,6 +120,7 @@ def capacity(db,api,user,proposed,exclude=None):
     start,end=interval(proposed)
     blackouts=list(db.scalars(select(Blackout).where(Blackout.location==user.location,
         Blackout.day>=start.date(),Blackout.day<=end.date()).order_by(Blackout.day,Blackout.period)))
+    blackouts=[row for row in blackouts if overlaps(start,end,*blackout_interval(row))]
     external=read_requests(api,start.date(),end.date()) if blackouts else []
     cache={};result=[]
     for row in blackouts:
