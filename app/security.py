@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+from types import SimpleNamespace
 from datetime import timedelta, timezone
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, InvalidHashError
@@ -28,6 +29,19 @@ def current_user(request, db):
     user = db.get(User, session.user_id)
     if not user or not user.active:
         raise HTTPException(401, 'Account disabled.')
+    preview = request.session.get('employee_view', False)
+    if preview and user.role != 'admin':
+        request.session.pop('employee_view', None)
+        preview = False
+    if preview and request.url.path != '/employee-view':
+        if request.method not in ('GET', 'HEAD', 'OPTIONS'):
+            raise HTTPException(403, 'Employee view is a preview. Exit employee view before submitting or saving.')
+        # Copy scalar values; never mutate the persistent account or its role.
+        user = SimpleNamespace(**{column.key: getattr(user, column.key) for column in User.__table__.columns})
+        user.role = 'employee'
+        user.ops_access = False
+        user.ops_locations = []
+        user.availability_access = True
     if (request.url.path == '/availability' or request.url.path.startswith('/requests')) and not (user.availability_access or user.role == 'admin'):
         raise HTTPException(403, 'Availability access is not enabled for your account.')
     from .time_off import enabled

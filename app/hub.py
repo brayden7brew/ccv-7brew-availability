@@ -121,3 +121,18 @@ async def save_modules(request: Request, user_id: int, db=Depends(get_db)):
         'after': dict(time_off_access=person.time_off_access, availability_access=person.availability_access, ops_access=enabled, ops_locations=locations)}))
     db.commit()
     return RedirectResponse(f'/admin/users/{person.id}?saved=1', 303)
+
+
+@router.post('/employee-view')
+async def employee_view(request: Request, db=Depends(get_db)):
+    from fastapi.responses import RedirectResponse
+    actor = current_user(request, db)
+    form = await request.form(max_fields=3)
+    csrf(request, form.get('csrf'))
+    if form.get('mode') == 'exit':
+        request.session.pop('employee_view', None)
+        return RedirectResponse('/', 303)
+    if actor.role != 'admin':
+        raise HTTPException(403, 'Administrator access is required.')
+    request.session['employee_view'] = True
+    return RedirectResponse('/', 303)

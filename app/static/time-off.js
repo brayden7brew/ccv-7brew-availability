@@ -4,12 +4,19 @@
   const full = form.elements.full_day;
   const first = form.elements.first;
   const last = form.elements.last;
+  const multiple = form.elements.multiple_days;
   const from = form.elements.from;
   const to = form.elements.to;
   let dirty = false;
   document.addEventListener('input', () => { dirty = true; });
   document.addEventListener('change', () => { dirty = true; });
-  function update() {
+  function update(event) {
+    if (event && event.target === multiple && multiple.checked) full.checked = true;
+    if (event && event.target === full && !full.checked) multiple.checked = false;
+    form.querySelector('[data-time-off-last]').hidden = !multiple.checked;
+    form.querySelector('[data-first-day-label]').textContent = multiple.checked ? 'First day' : 'Day';
+    last.disabled = !multiple.checked;
+    last.required = multiple.checked;
     from.disabled = to.disabled = full.checked;
     form.querySelector('[data-partial-times]').hidden = full.checked;
     from.required = to.required = !full.checked;
