@@ -272,3 +272,16 @@ def test_blackout_never_blocks_normal_availability_changes(client,db,pilot):
     change=db.scalar(select(Change).where(Change.action=='weekly'))
     decide(db,db.get(User,2),change.id,'approve','',Fake())
     assert change.status=='approved_dry_run'
+
+
+def test_notification_button_uses_saved_request_not_comment(client,db,pilot,monkeypatch):
+    from app.mailer import process_batch
+    monkeypatch.setattr(settings(),'email_enabled',True)
+    db.get(User,1).notification_email='employee@example.com'
+    db.get(User,2).notification_email='manager@example.com';db.commit()
+    change=request(client,db)
+    item=db.scalar(select(EmailOutbox))
+    item.body='View request: https://example.invalid/untrusted\n'+item.body;db.commit()
+    links=[]
+    assert process_batch(sessionmaker(db.bind),lambda message: links.append(message.link))==1
+    assert links==[settings().public_base_url.rstrip('/')+f'/time-off/{change.id}']

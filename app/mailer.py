@@ -25,7 +25,7 @@ def send_email(item):
     message['Subject']=item.subject
     message['Message-ID']=f'<ccv-{item.id}@{cfg.email_from.split("@")[-1]}>'
     message.set_content(item.body)
-    link=getattr(item, 'link', '') or next((line.removeprefix('View request: ') for line in item.body.splitlines() if line.startswith('View request: ')), cfg.public_base_url.rstrip('/')+f'/requests/{item.change_id}')
+    link=getattr(item, 'link', '') or cfg.public_base_url.rstrip('/')+f'/requests/{item.change_id}'
     label=getattr(item, 'link_label', 'View request')
     message.add_alternative('<html><body><p>'+html.escape(item.body).replace('\n','<br>')+
         '</p><p><a href="'+html.escape(link,quote=True)+'">'+html.escape(label)+'</a></p></body></html>',subtype='html')
@@ -60,6 +60,8 @@ def process_batch(factory=SessionLocal,sender=send_email):
             address=user.notification_email or user.email
             if not valid_email(address):
                 item.status='missing_address'; db.commit(); continue
+            path='time-off' if change.action=='time_off' else 'requests'
+            item.link=settings().public_base_url.rstrip('/')+f'/{path}/{change.id}'
             item.recipient=address
             item.attempts+=1
             try:

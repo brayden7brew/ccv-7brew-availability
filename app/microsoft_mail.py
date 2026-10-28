@@ -11,7 +11,7 @@ class MicrosoftMailError(Exception):
 def send_graph(item, transport=None):
     cfg=settings()
     tenant=str(UUID(cfg.microsoft_tenant_id))
-    link=getattr(item, 'link', '') or next((line.removeprefix('View request: ') for line in item.body.splitlines() if line.startswith('View request: ')), cfg.public_base_url.rstrip('/')+f'/requests/{item.change_id}')
+    link=getattr(item, 'link', '') or cfg.public_base_url.rstrip('/')+f'/requests/{item.change_id}'
     label=getattr(item, 'link_label', 'View request')
     body='<p>'+html.escape(item.body).replace('\n','<br>')+'</p><p><a href="'+html.escape(link,quote=True)+'">'+html.escape(label)+'</a></p>'
     try:
