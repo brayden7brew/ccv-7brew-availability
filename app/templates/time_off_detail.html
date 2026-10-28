@@ -1,0 +1,8 @@
+{% extends 'base.html' %}{% block content %}
+<a href="/time-off">← Time off</a><h1>{{ employee.name }}’s time-off request</h1><span class="badge">{{ status_labels.get(change.status,change.status|replace('_',' ')) }}</span>
+<section class="card"><h2>Requested time off</h2><p>{{ change.proposed|time_off_label }}</p><p>{{ 'Full day(s)' if change.proposed.full_day else 'Partial day' }} · {{ change.location }}</p><h3>Employee’s reason</h3><p class="employee-comment">{{ change.employee_note }}</p>{% if change.manager_note %}<h3>Manager’s comment</h3><p>{{ change.manager_note }}</p>{% endif %}</section>
+{% if change.status in ['approval_failed','needs_reconciliation'] %}<p class="banner">This request needs administrator attention before it can be completed. Do not submit it again.</p>{% endif %}
+{% if change.status in ['queued','applying','preparing'] %}<p class="banner">Approved and syncing in the background. You may leave this page.</p>{% endif %}
+{% if review and change.status=='pending' %}<form class="card" method="post" action="/time-off/{{ change.id }}/decision"><input type="hidden" name="csrf" value="{{ csrf }}"><label>Manager’s comment (optional)<textarea name="note" maxlength="2000"></textarea></label><button name="decision" value="approve">Approve time off</button> <button name="decision" value="reject" class="danger">Decline</button></form>{% endif %}
+{% if user.role=='admin' %}<h2>Activity</h2>{% for entry in history %}<details class="card"><summary>{{ entry.event|replace('_',' ')|capitalize }} · {{ entry.created|local_datetime }}</summary><pre>{{ entry.details|tojson(indent=2) }}</pre></details>{% endfor %}{% endif %}
+{% endblock %}

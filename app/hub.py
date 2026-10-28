@@ -112,11 +112,12 @@ async def save_modules(request: Request, user_id: int, db=Depends(get_db)):
     enabled = form.get('ops_access') == 'on'
     if enabled and not locations and person.role != 'admin':
         raise HTTPException(422, 'Select at least one stand for Ops access.')
-    before = dict(availability_access=person.availability_access, ops_access=person.ops_access, ops_locations=person.ops_locations)
+    before = dict(time_off_access=person.time_off_access, availability_access=person.availability_access, ops_access=person.ops_access, ops_locations=person.ops_locations)
+    person.time_off_access = form.get('time_off_access') == 'on'
     person.availability_access = form.get('availability_access') == 'on'
     person.ops_access, person.ops_locations = enabled, locations
     db.add(AdminAudit(actor_id=actor.id, target_id=person.id, details={
         'action': 'module_access', 'before': before,
-        'after': dict(availability_access=person.availability_access, ops_access=enabled, ops_locations=locations)}))
+        'after': dict(time_off_access=person.time_off_access, availability_access=person.availability_access, ops_access=enabled, ops_locations=locations)}))
     db.commit()
     return RedirectResponse(f'/admin/users/{person.id}?saved=1', 303)

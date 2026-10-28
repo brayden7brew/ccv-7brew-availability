@@ -7,6 +7,7 @@
 {% include 'availability_calendar.html' %}
 {% endif %}
 <section class="hub-grid" aria-label="Your tools">
+{% if user.time_off_visible %}<a class="hub-card" href="/time-off"><h2>Time off</h2><p>Request full or partial days off and check blackout dates.</p><span class="hub-open">View time off →</span></a>{% endif %}
 {% if user.availability_access or user.role == 'admin' %}
 <a class="hub-card" href="/requests"><span class="hub-icon" aria-hidden="true">✓</span><h2>{{ 'Manage Requests' if user.role in ('manager','admin') else 'My Requests' }}</h2><p>{{ 'Review requests for your approval locations and track your own.' if user.role in ('manager','admin') else 'Track approvals and view your previous requests.' }}</p><span class="hub-open">View requests →</span></a>
 {% endif %}

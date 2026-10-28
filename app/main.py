@@ -41,9 +41,9 @@ templates.env.globals['week_totals'] = week_totals
 templates.env.globals['working_hour_labels'] = working_hour_labels
 templates.env.globals['unavailable_hour_labels'] = unavailable_hour_labels
 from .availability_rules import counted_minutes
-from .presentation import clock_label, date_label, local_datetime
+from .presentation import clock_label, date_label, local_datetime, time_off_label
 templates.env.globals['counted_minutes'] = counted_minutes
-templates.env.filters.update(clock_label=clock_label, date_label=date_label, local_datetime=local_datetime)
+templates.env.filters.update(time_off_label=time_off_label, clock_label=clock_label, date_label=date_label, local_datetime=local_datetime)
 from .admin import router as admin_router
 app.include_router(admin_router)
 from .portal_setup import router as portal_setup_router
@@ -52,6 +52,8 @@ from .webhooks import router as webhook_router
 app.include_router(webhook_router)
 from .hub import router as hub_router
 app.include_router(hub_router)
+from .time_off import router as time_off_router
+app.include_router(time_off_router)
 
 @app.middleware('http')
 async def headers(request, call_next):
@@ -186,7 +188,7 @@ def dashboard(request: Request, page_number: int = 1, db=Depends(get_db)):
     user = current_user(request, db)
     if page_number < 1 or page_number > 100000: raise HTTPException(422, 'Invalid page.')
     locations = list(db.scalars(select(Scope.location).where(Scope.manager_id == user.id))) if user.role in ('manager','admin') else []
-    changes = db.scalars(select(Change).where(~select(Audit.id).where(
+    changes = db.scalars(select(Change).where(Change.action != 'time_off', ~select(Audit.id).where(
         Audit.change_id == Change.id, Audit.event == 'employee_archived').exists(), or_(Change.employee_id == user.id,
         Change.location.in_(locations))).order_by(Change.created.desc()).offset((page_number-1)*50).limit(50)).all()
     names = {u.id: u.name for u in db.scalars(select(User).where(User.id.in_({c.employee_id for c in changes}))).all()}
@@ -290,7 +292,7 @@ async def submit(request: Request, db=Depends(get_db)):
     except HTTPException as exc:
         return invalid(exc.detail, exc.status_code)
     if user.role in ('manager','admin') and db.scalar(select(Change.id).where(
-            Change.employee_id == user.id, Change.status.in_(['queued','preparing','applying','needs_reconciliation']))):
+            Change.employee_id == user.id, Change.action == 'weekly', Change.status.in_(['queued','preparing','applying','needs_reconciliation']))):
         return invalid('An earlier availability update needs attention. Ask your administrator to resolve it before saving another update.', 409)
     usage = request_usage(db, user.id)
     if usage['blocked']:
@@ -337,6 +339,7 @@ def detail(request: Request, change_id: int, db=Depends(get_db)):
     user = current_user(request, db)
     change = db.get(Change, change_id)
     if not change or not allowed(db, user, change): raise HTTPException(404, 'Request not found.')
+    if change.action == 'time_off': return RedirectResponse(f'/time-off/{change.id}',303)
     employee = db.get(User, change.employee_id)
     history = db.scalars(select(Audit).where(Audit.change_id == change.id).order_by(Audit.id)).all()
     if user.role != 'admin':

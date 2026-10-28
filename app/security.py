@@ -30,6 +30,8 @@ def current_user(request, db):
         raise HTTPException(401, 'Account disabled.')
     if (request.url.path == '/availability' or request.url.path.startswith('/requests')) and not (user.availability_access or user.role == 'admin'):
         raise HTTPException(403, 'Availability access is not enabled for your account.')
+    from .time_off import enabled
+    user.time_off_visible = enabled(db,user)
     return user
 
 def login(request, db, user, *, remember=False):

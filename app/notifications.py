@@ -45,9 +45,19 @@ def enqueue_notifications(db, change, event):
                 text+='\nThis confirms the manager decision. Open the request to check the When I Work sync status.'
             if change.dry_run: text+='\nThis was a test approval; When I Work was not changed.'
         if change.manager_note: text+=f'\n\nManager note: {change.manager_note}'
-    link=cfg.public_base_url.rstrip('/')+f'/requests/{change.id}'
+    if change.action == 'time_off':
+        subject = f'{employee.name} requested time off' if event=='submitted' else f'Your time-off request was {"approved" if event=="approved" else "declined"}'
+        text = (f'{employee.name} submitted a time-off request. Sign in to review the dates and reason.' if event=='submitted'
+                else f'Hi {employee.name},\n\nYour time-off request was {"approved" if event=="approved" else "declined"}.' + (f'\n\nManager note: {change.manager_note}' if change.manager_note else ''))
+        if event=='approved' and change.dry_run:
+            text+='\nThis was a test approval; When I Work was not changed.'
+    path='time-off' if change.action=='time_off' else 'requests'
+    link=cfg.public_base_url.rstrip('/')+f'/{path}/{change.id}'
     for user in recipients:
-        if not wants_notifications(user, change): continue
+        if not user.active or not wants_notifications(user, change): continue
+        if change.action=='time_off':
+            from .time_off import enabled
+            if not enabled(db,user): continue
         if db.scalar(select(EmailOutbox.id).where(EmailOutbox.change_id==change.id,
                 EmailOutbox.recipient_id==user.id,EmailOutbox.event==event)):
             continue

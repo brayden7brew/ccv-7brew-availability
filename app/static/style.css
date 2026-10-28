@@ -50,3 +50,6 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .directory-show-disabled input{width:18px;height:18px;accent-color:#8a2432}
 @media(max-width:950px){.directory-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.directory-filters .directory-search{grid-column:1/-1}.directory-filter-actions{grid-column:1/-1}}
 @media(max-width:550px){.directory-filters{grid-template-columns:minmax(0,1fr)}.directory-filter-actions button{flex:1}}
+.time-off-blackout{border-top:1px solid #e0e8e4;padding:16px 0}.employee-comment{white-space:pre-wrap;overflow-wrap:anywhere}
+
+[data-partial-times][hidden]{display:none}

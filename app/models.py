@@ -1,5 +1,5 @@
 from datetime import date, datetime, timezone
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, false, true
 from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base
 
@@ -16,6 +16,7 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(120))
     password_hash: Mapped[str] = mapped_column(Text)
     availability_access: Mapped[bool] = mapped_column(Boolean, default=True, server_default='true')
+    time_off_access: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     ops_access: Mapped[bool] = mapped_column(Boolean, default=False, server_default='false')
     ops_locations: Mapped[list | None] = mapped_column(JSON, nullable=True)
     role: Mapped[str] = mapped_column(String(20), default='employee')
@@ -154,3 +155,20 @@ class WIWCredential(Base):
     next_attempt: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_success: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error: Mapped[str] = mapped_column(String(300), default='', server_default='')
+
+class TimeOffSettings(Base):
+    __tablename__ = 'time_off_settings'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    everyone: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+
+class Blackout(Base):
+    __tablename__ = 'time_off_blackouts'
+    __table_args__ = (UniqueConstraint('location','day','period'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    location: Mapped[str] = mapped_column(String(120), index=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    period: Mapped[str] = mapped_column(String(20))
+    maximum: Mapped[int] = mapped_column(Integer)
+    explanation: Mapped[str] = mapped_column(String(500))
+    evening_end: Mapped[int] = mapped_column(Integer, default=23, server_default='23')

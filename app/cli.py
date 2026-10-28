@@ -102,6 +102,13 @@ def main():
             from .workflow import canonical
             change = db.get(Change, args.id)
             if not change: raise SystemExit('Request not found.')
+            if change.action == 'time_off':
+                entries = db.scalars(select(Audit).where(Audit.change_id == change.id).order_by(Audit.id)).all()
+                print(f'Time-off request #{change.id}: {change.status}')
+                for entry in entries:
+                    print(f'{entry.event}: {entry.details}')
+                print('Read-only journal. Inspect WIW time off before any recovery; do not replay the approval.')
+                return
             provider = WIW()
             approval = db.scalars(select(Audit).where(Audit.change_id == change.id,
                 Audit.event.in_(['approved','recovery_plan'])).order_by(Audit.id.desc())).first()
@@ -173,6 +180,8 @@ def main():
             actor = db.scalar(select(User).where(User.email == args.manager_email.lower(), User.role.in_(['manager','admin']), User.active.is_(True)))
             if not change or change.status not in ['applying','needs_reconciliation'] or not actor:
                 raise SystemExit('An unresolved request and active manager are required.')
+            if change.action == 'time_off':
+                raise SystemExit('Time off must be reviewed in WIW before recovery. This availability reconciliation command cannot change time-off status.')
             if len(args.note.strip()) < 10: raise SystemExit('Include a useful reconciliation explanation.')
             if change.action == 'weekly':
                 from .weekly_workflow import reconcile_weekly

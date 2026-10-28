@@ -29,3 +29,14 @@ def local_datetime(value):
         return f'{date_label(local)} at {clock_label(local.time())} {local:%Z}'
     except (AttributeError, TypeError, ValueError):
         return str(value)
+
+
+def time_off_label(proposed):
+    """Show inclusive full-day dates instead of the stored exclusive end."""
+    from datetime import timedelta
+    start = datetime.fromisoformat(proposed['start'])
+    end = datetime.fromisoformat(proposed['end'])
+    if proposed.get('full_day'):
+        last = (end - timedelta(days=1)).date()
+        return date_label(start.date()) + (f" – {date_label(last)}" if last != start.date() else '') + ' · All day'
+    return f"{date_label(start.date())} · {clock_label(start.time())}–{clock_label(end.time())}"

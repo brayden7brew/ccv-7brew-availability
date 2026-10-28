@@ -14,7 +14,7 @@ from .wiw import WIW, WIWError
 def process_approval(factory=SessionLocal, api_factory=WIW):
     with factory() as db:
         candidates = db.execute(select(Change.id, Change.employee_id).where(
-            Change.status == 'queued').order_by(Change.id).limit(20)).all()
+            Change.status == 'queued', Change.action == 'weekly').order_by(Change.id).limit(20)).all()
         for change_id, employee_id in candidates:
             # Keep the same employee -> change lock order as submission/decisions.
             employee = db.scalar(select(User).where(User.id == employee_id)

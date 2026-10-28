@@ -306,3 +306,36 @@ workplace/context reseeds the saved credential. Do not roll back to a pre-renewa
 version that only reads the initial environment token after it has been rotated.
 If refresh succeeded remotely but the response or database save was lost, manual
 reconnection may be necessary. The web service must stay running for idle renewal.
+
+### Time-off pilot
+
+The time-off migration enables the module but grants individual access only to the
+active administrator `brayden@rva7brew.com`. Other administrators do not bypass
+this pilot restriction. In **Admin → Time-off access**, enable/disable the module
+or turn on access for everyone. Individual access is under **Admin → person →
+Tools this person can use**. Disabling pauses queued approvals; a WIW write already
+in progress is still verified and recorded. Turning the feature off does not
+cancel existing WIW time off.
+
+Employees request full days (up to 31 dates) or a partial single day with a required
+reason and at least 14 days’ notice. Primary-stand managers approve or decline;
+their comment is optional. Approval reserves capacity and the background worker
+creates unpaid WIW time off using the enabled **Hourly Employee Time Off** request
+type, then verifies it by ID. The pilot should be checked against the real WIW
+account before granting employee/manager access. Test mode never writes to WIW.
+Time off does not consume the existing monthly availability-change allowance.
+
+Managers configure blackout limits by primary stand, date, and period: 5 AM–noon,
+noon–5 PM, or 5 PM–10/11 PM. Each limit has an employee-visible explanation. Count
+active primary-stand people with any normally unavailable time or approved time
+off overlapping that period, once per person. Queued approvals reserve places;
+pending requests do not. Capacity is checked at submission, approval, and worker
+processing. Full periods prevent new requests/approvals. Lowering a cap does not
+cancel existing approvals. Normal availability changes remain allowed even when
+they put a blackout period over its cap. External WIW changes can also affect
+capacity; the next check reads WIW again.
+
+An uncertain POST/readback remains `needs_reconciliation`, and is never replayed
+automatically. Use `inspect-request --id ...` to read its journal and review the
+WIW time-off record. Existing availability recovery commands cannot reconcile
+these records. Do not resubmit an uncertain request as a recovery method.

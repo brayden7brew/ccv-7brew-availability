@@ -28,6 +28,8 @@ def canonical(state):
 def decide(db, actor, change_id, decision, note, provider=None, replace_existing=False, *, enqueue=False, run_queued=False):
     # Employee row serializes decisions across all of this employee's requests in Postgres.
     existing = db.get(Change, change_id)
+    if existing and existing.action=='time_off':
+        raise HTTPException(404,'Use the time-off request page.')
     if not existing or not allowed(db, actor, existing):
         raise HTTPException(404, 'Request not found.')
     if not actor.active or actor.role not in ('manager', 'admin'):
@@ -50,7 +52,7 @@ def decide(db, actor, change_id, decision, note, provider=None, replace_existing
     if change.action != 'weekly':
         raise HTTPException(409, 'Please resubmit this older request using the weekly availability form.')
     unresolved = db.scalar(select(Change.id).where(Change.employee_id == employee.id,
-        Change.id != change.id, Change.status.in_(['queued', 'preparing', 'applying', 'needs_reconciliation'])))
+        Change.id != change.id, Change.action == 'weekly', Change.status.in_(['queued', 'preparing', 'applying', 'needs_reconciliation'])))
     if unresolved:
         raise HTTPException(409, 'An earlier write needs reconciliation before another approval.')
     from .config import settings
