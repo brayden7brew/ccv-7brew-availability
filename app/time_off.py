@@ -295,6 +295,8 @@ def process_time_off(factory=SessionLocal,api_factory=WIW):
             audit(db,change,actor,'time_off_created',{'id':record['id']});db.commit()
             current=api.call('GET',f"/2/requests/{record['id']}").get('request')
             verify(current,payload)
+            if current['id']!=record['id']:
+                raise WIWError('WIW returned a different time-off record during verification.')
             change.event_id=record['id'];change.status='applied'
             audit(db,change,actor,'approved',{});audit(db,change,actor,'applied',{'id':record['id']});db.commit()
         except Exception as exc:

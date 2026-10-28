@@ -117,7 +117,7 @@ def test_blackout_permission_and_zero_capacity(client,db,pilot):
     assert client.post('/time-off',data=data(csrf)).status_code==409
 
 
-@pytest.mark.parametrize('failure',[None,'post','verify','readback'])
+@pytest.mark.parametrize('failure',[None,'post','verify','readback','wrong_id'])
 def test_durable_wiw_creation_and_no_replay(client,db,pilot,monkeypatch,failure):
     monkeypatch.setattr(settings(),'dry_run',False);monkeypatch.setattr(settings(),'wiw_mode','live')
     change=request(client,db);csrf=sign_in(client,'manager@test.local')
@@ -128,6 +128,7 @@ def test_durable_wiw_creation_and_no_replay(client,db,pilot,monkeypatch,failure)
             if method=='POST' and failure=='post': raise WIWError('Uncertain write')
             result=super().call(method,path,**kwargs)
             if method=='POST' and failure=='verify': result['request']['user_id']=999
+            if path=='/2/requests/99' and failure=='wrong_id': result['request']['id']=100
             if path=='/2/requests/99' and failure=='readback': raise WIWError('Read unavailable')
             return result
     api=Broken();factory=sessionmaker(db.bind,expire_on_commit=False)
@@ -257,3 +258,17 @@ def test_unrelated_period_does_not_require_wiw_capacity_read(client,db,pilot,mon
     csrf=sign_in(client);payload=data(csrf);payload.pop('full_day')
     payload.update({'from':'12:00','to':'17:00'})
     assert client.post('/time-off',data=payload).status_code==200
+
+
+def test_blackout_never_blocks_normal_availability_changes(client,db,pilot):
+    from test_portal import submit,Fake
+    from app.workflow import decide
+    day=local_today()+timedelta(days=30)
+    for period in ('morning','afternoon','evening'):
+        db.add(Blackout(location='North',day=day,period=period,maximum=0,
+                       explanation='Full capacity',evening_end=23))
+    db.commit()
+    submit(client)
+    change=db.scalar(select(Change).where(Change.action=='weekly'))
+    decide(db,db.get(User,2),change.id,'approve','',Fake())
+    assert change.status=='approved_dry_run'
