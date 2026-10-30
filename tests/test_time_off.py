@@ -102,7 +102,8 @@ def test_blackout_blocks_submission_and_counts_normal_availability(client,db,pil
     assert response.status_code==409 and 'Holiday staffing' in response.text
     payload=data(csrf);payload.pop('full_day');payload.update({'from':'12:00','to':'17:00'})
     assert client.post('/time-off',data=payload).status_code==200
-    assert '1 unavailable / 1 allowed' in client.get(f'/time-off?check_date={row.day}').text
+    employee_page=client.get(f'/time-off?check_date={row.day}').text
+    assert 'Check date' not in employee_page and '<h2>Blackout dates</h2>' not in employee_page
 
 
 def test_blackout_permission_and_zero_capacity(client,db,pilot):
@@ -112,7 +113,7 @@ def test_blackout_permission_and_zero_capacity(client,db,pilot):
     assert client.post('/time-off/blackouts',data=payload).status_code==403
     payload['location']='North'
     assert client.post('/time-off/blackouts',data=payload).status_code==200
-    assert db.scalar(select(Blackout)).evening_end==22
+    assert db.scalar(select(Blackout)).evening_end==(23 if (local_today()+timedelta(days=20)).weekday() in (4,5) else 22)
     csrf=sign_in(client)
     assert client.post('/time-off',data=data(csrf)).status_code==409
 
@@ -182,9 +183,10 @@ def test_distinct_people_primary_stand_and_period_boundaries(client,db,pilot,mon
     row.period='evening';row.evening_end=22
     api.events[1]=[{'type':1,'start_time':day.replace(hour=22).isoformat(),
         'end_time':day.replace(hour=23).isoformat()}]
-    assert blocked_people(db,api,row,[],{})[0]==set()
-    row.evening_end=23
-    assert blocked_people(db,api,row,[],{})[0]=={1}
+    expected={1} if row.day.weekday() in (4,5) else set()
+    assert blocked_people(db,api,row,[],{})[0]==expected
+    row.evening_end=23  # Older stored overrides cannot change the weekday rule.
+    assert blocked_people(db,api,row,[],{})[0]==expected
 
 
 def test_dry_run_has_no_write_and_time_off_does_not_use_availability_quota(client,db,pilot):
@@ -285,3 +287,97 @@ def test_notification_button_uses_saved_request_not_comment(client,db,pilot,monk
     links=[]
     assert process_batch(sessionmaker(db.bind),lambda message: links.append(message.link))==1
     assert links==[settings().public_base_url.rstrip('/')+f'/time-off/{change.id}']
+
+
+@pytest.mark.parametrize('weekday',range(7))
+@pytest.mark.parametrize('period',['all_day','evening'])
+def test_blackout_closing_follows_day_of_week(weekday,period):
+    from app.time_off import blackout_interval,blackout_label
+    from datetime import date
+    day=date(2026,11,2)+timedelta(days=weekday)
+    row=Blackout(day=day,period=period,evening_end=22)
+    start,end=blackout_interval(row)
+    expected=23 if weekday in (4,5) else 22
+    assert start.hour==(5 if period=='all_day' else 17)
+    assert end.hour==expected
+    assert f'{expected-12} PM' in blackout_label(row)
+
+
+def test_blackout_defaults_to_whole_day_and_counts_each_person_once(client,db,pilot,monkeypatch):
+    csrf=sign_in(client,'manager@test.local');day=local_today()+timedelta(days=20)
+    payload={'csrf':csrf,'location':'North','day':str(day),'maximum':'1','explanation':'Holiday'}
+    assert client.post('/time-off/blackouts',data=payload).status_code==200
+    row=db.scalar(select(Blackout))
+    assert row.period=='all_day'
+    api=API();zone=ZoneInfo(settings().business_timezone);start=datetime.combine(day,time(5),zone)
+    api.events[2]=[{'type':1,'start_time':start.replace(hour=hour).isoformat(),
+                   'end_time':start.replace(hour=hour+1).isoformat()} for hour in (5,17)]
+    monkeypatch.setattr('app.time_off.WIW',lambda:api)
+    csrf=sign_in(client);partial=data(csrf);partial.pop('full_day')
+    partial.update({'from':'12:00','to':'13:00'})
+    assert client.post('/time-off',data=partial).status_code==409
+    coverage=capacity(db,api,db.get(User,1),{'start':start.isoformat(),'end':start.replace(hour=22).isoformat()})
+    assert coverage[0]['count']==1
+
+
+def test_managers_only_manage_scoped_stands_and_cannot_select_all(client,db,pilot):
+    csrf=sign_in(client,'manager@test.local')
+    html=client.get('/time-off').text
+    assert 'value="North" readonly' in html
+    assert 'name="all_stands"' not in html and '<option>South</option>' not in html
+    payload={'csrf':csrf,'day':str(local_today()+timedelta(days=20)),'maximum':'2','explanation':'Holiday'}
+    assert client.post('/time-off/blackouts',data={**payload,'all_stands':'on'}).status_code==403
+    assert client.post('/time-off/blackouts',data={**payload,'location':'South'}).status_code==403
+    assert db.scalar(select(Blackout)) is None
+
+
+def test_admin_can_apply_blackout_to_specific_or_all_stands(client,db,pilot):
+    from app.models import Location
+    db.get(User,2).role='admin'
+    db.add(Location(name='West'));db.commit()
+    csrf=sign_in(client,'manager@test.local')
+    html=client.get('/time-off').text
+    assert 'name="all_stands"' in html and 'value="West"' in html
+    payload={'csrf':csrf,'day':str(local_today()+timedelta(days=20)),'maximum':'2','explanation':'Holiday',
+             'locations':['South','West']}
+    assert client.post('/time-off/blackouts',data=payload).status_code==200
+    assert set(db.scalars(select(Blackout.location)))=={'South','West'}
+    assert client.post('/time-off/blackouts',data={**payload,'locations':['West','Unknown']}).status_code==403
+    assert set(db.scalars(select(Blackout.location)))=={'South','West'}
+    payload['all_stands']='on';payload['maximum']='3'
+    assert client.post('/time-off/blackouts',data=payload).status_code==200
+    rows=db.scalars(select(Blackout)).all()
+    assert {row.location for row in rows}=={'North','South','West'}
+    assert all(row.maximum==3 for row in rows)
+
+
+def test_blackout_list_counts_requests_approved_and_caps_by_stand_and_period(client,db,pilot):
+    from app.time_off import blackout_request_counts
+    morning=blackout(db,3,'morning');evening=blackout(db,2,'evening')
+    start=datetime.combine(morning.day,time(8),ZoneInfo(settings().business_timezone))
+    def add(uid,status,start,end):
+        change=Change(employee_id=uid,location=db.get(User,uid).location,wiw_user_id=uid,action='time_off',
+                      proposed={'start':start.isoformat(),'end':end.isoformat(),'full_day':False},
+                      status=status,before={},read_start=start.isoformat(),read_end=end.isoformat())
+        db.add(change);db.flush();return change
+    add(1,'pending',start,start.replace(hour=9))
+    add(1,'queued',start,start.replace(hour=10))
+    add(1,'rejected',start,start.replace(hour=11))
+    add(1,'applied',start.replace(hour=17),start.replace(hour=18))
+    add(3,'applied',start,start.replace(hour=9))  # Other primary stand.
+    archived=add(1,'applied',start,start.replace(hour=9))
+    db.add(Audit(change_id=archived.id,actor_id=2,event='employee_archived',details={}))
+    db.commit()
+    counts=blackout_request_counts(db,[morning,evening])
+    assert counts[morning.id]=={'requests':3,'approved':1}
+    assert counts[evening.id]=={'requests':1,'approved':1}
+    sign_in(client,'manager@test.local')
+    html=client.get('/time-off').text
+    assert '<dt>Requests</dt><dd>3</dd>' in html
+    assert '<dt>Approved</dt><dd>1</dd>' in html
+    assert '<dt>Cap</dt><dd>3</dd>' in html
+    assert 'Check date' not in html
+    sign_in(client)
+    html=client.get('/time-off?check_date=invalid').text
+    assert '<h2>Blackout dates</h2>' not in html
+    assert '<dt>Requests</dt>' not in html

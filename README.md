@@ -325,8 +325,18 @@ type, then verifies it by ID. The pilot should be checked against the real WIW
 account before granting employee/manager access. Test mode never writes to WIW.
 Time off does not consume the existing monthly availability-change allowance.
 
-Managers configure blackout limits by primary stand, date, and period: 5 AM–noon,
-noon–5 PM, or 5 PM–10/11 PM. Each limit has an employee-visible explanation. Count
+Stand managers can configure blackouts only for their assigned approval stands.
+Administrators can select all stands or any specific stands; the capacity applies
+independently at each stand. These permissions are enforced on the server.
+Managers configure blackout limits by primary stand and date, defaulting to the
+whole working day (5 AM–close). A checkbox limits the blackout to 5 AM–noon,
+noon–5 PM, or 5 PM–close. Closing is automatic: 11 PM Friday/Saturday and 10 PM
+Sunday–Thursday, including existing evening limits. Whole-day limits count each
+person once across the day; if both whole-day and period limits exist, both apply.
+Managers/admins see the blackout list with portal request totals, approved/reserved
+request totals, and the cap. Employees have no blackout checker or management list;
+they see the explanation if a blackout prevents their submission. Request totals
+include declined requests and are separate from distinct people using capacity. Count
 active primary-stand people with any normally unavailable time or approved time
 off overlapping that period, once per person. Queued approvals reserve places;
 pending requests do not. Capacity is checked at submission, approval, and worker

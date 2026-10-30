@@ -1,4 +1,24 @@
 (() => {
+  const blackout = document.querySelector('[data-blackout-form]');
+  if (blackout) {
+    function updateBlackout() {
+      const limited = blackout.elements.limit_period.checked;
+      blackout.querySelector('[data-blackout-period]').hidden = !limited;
+      blackout.elements.period.disabled = !limited;
+    }
+    const allStands = blackout.elements.all_stands;
+    if (allStands) {
+      function updateStands() {
+        blackout.querySelectorAll('[name="locations"]').forEach(input => {
+          input.disabled = allStands.checked;
+        });
+      }
+      allStands.addEventListener('change', updateStands);
+      updateStands();
+    }
+    blackout.elements.limit_period.addEventListener('change', updateBlackout);
+    updateBlackout();
+  }
   const form = document.querySelector('[data-time-off-form]');
   if (!form) return;
   const full = form.elements.full_day;

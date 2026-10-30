@@ -15,7 +15,7 @@ from .wiw import WIW, WIWError
 from .time_off_wiw import read_requests, unpaid_type, verify
 
 router=APIRouter()
-PERIODS={'morning':(5,12,'Morning · 5 AM–noon'),'afternoon':(12,17,'Afternoon · noon–5 PM'),
+PERIODS={'all_day':(5,23,'Whole day · 5 AM–close'),'morning':(5,12,'Morning · 5 AM–noon'),'afternoon':(12,17,'Afternoon · noon–5 PM'),
          'evening':(17,23,'Evening · 5 PM–close')}
 RESERVED=('queued','preparing','applying','needs_reconciliation','applied','reconciled_applied','approved_dry_run')
 
@@ -39,6 +39,13 @@ def actor_for(request,db):
 def stands(db,user):
     if user.role not in ('admin','manager'): return []
     return list(db.scalars(select(Scope.location).where(Scope.manager_id==user.id)))
+
+
+def blackout_stands(db,user):
+    if user.role=='admin':
+        from .locations import location_choices
+        return [name for name in location_choices(db) if name]
+    return stands(db,user)
 
 
 def can_review(db,user,change):
@@ -74,10 +81,19 @@ def parse_form(form):
     return {'start':start.isoformat(),'end':end.isoformat(),'full_day':full},reason
 
 
+def closing_hour(day):
+    return 23 if day.weekday() in (4,5) else 22
+
+
+def blackout_label(blackout):
+    label=PERIODS[blackout.period][2]
+    return label.replace('close',f'{closing_hour(blackout.day)-12} PM')
+
+
 def blackout_interval(blackout):
     zone=ZoneInfo(settings().business_timezone)
     begin,finish,_=PERIODS[blackout.period]
-    if blackout.period=='evening': finish=blackout.evening_end
+    if blackout.period in ('all_day','evening'): finish=closing_hour(blackout.day)
     a=datetime.combine(blackout.day,time(begin),zone)
     return a,a.replace(hour=finish)
 
@@ -135,7 +151,7 @@ def capacity(db,api,user,proposed,exclude=None):
             # Capacity is assessed for adding this person, counted only once.
             if any(overlaps(a,b,*interval(c.proposed)) for c in others): people.add(user.id)
         full=len(people)>=row.maximum if not exclude else len(people|{user.id})>row.maximum
-        result.append({'day':row.day,'period':PERIODS[row.period][2],'count':len(people),
+        result.append({'day':row.day,'period':blackout_label(row),'count':len(people),
                        'maximum':row.maximum,'explanation':row.explanation,'full':full})
     return result
 
@@ -149,26 +165,40 @@ def check_capacity(db,api,user,proposed,exclude=None):
     return rows
 
 
+def blackout_request_counts(db,blackouts):
+    """Portal request totals are distinct from people consuming blackout capacity."""
+    locations={row.location for row in blackouts}
+    changes=db.scalars(select(Change).join(User,User.id==Change.employee_id).where(
+        Change.action=='time_off',Change.location.in_(locations),User.active.is_(True),
+        User.location==Change.location,
+        ~select(Audit.id).where(Audit.change_id==Change.id,Audit.event=='employee_archived').exists()
+    )).all() if locations else []
+    counts={}
+    for row in blackouts:
+        start,end=blackout_interval(row)
+        matching=[change for change in changes if change.location==row.location
+                  and (change.dry_run is None or change.dry_run==settings().dry_run)
+                  and overlaps(start,end,*interval(change.proposed))]
+        counts[row.id]={'requests':len(matching),
+                        'approved':sum(change.status in RESERVED for change in matching)}
+    return counts
+
+
 @router.get('/time-off')
 def index(request:Request,db=Depends(get_db)):
     from .main import page
     user=actor_for(request,db);locations=stands(db,user)
+    manage_locations=blackout_stands(db,user)
     rows=db.scalars(select(Change).where(Change.action=='time_off',
         or_(Change.employee_id==user.id,Change.location.in_(locations)),
         ~select(Audit.id).where(Audit.change_id==Change.id,Audit.event=='employee_archived').exists()
         ).order_by(Change.created.desc()).limit(100)).all()
     names=dict(db.execute(select(User.id,User.name).where(User.id.in_({c.employee_id for c in rows}))).all())
-    blackouts=db.scalars(select(Blackout).where(Blackout.location.in_(set(locations+[user.location])),
-                       Blackout.day>=local_today()).order_by(Blackout.day,Blackout.location,Blackout.period)).all()
-    coverage=[]
-    if request.query_params.get('check_date'):
-        try: day=date.fromisoformat(request.query_params['check_date'])
-        except ValueError: raise HTTPException(422,'Choose a valid date.')
-        zone=ZoneInfo(settings().business_timezone)
-        a=datetime.combine(day,time(),zone)
-        coverage=capacity(db,WIW(),user,{'start':a.isoformat(),'end':(a+timedelta(days=1)).isoformat()})
+    blackouts=db.scalars(select(Blackout).where(Blackout.location.in_(manage_locations),
+                       Blackout.day>=local_today()).order_by(Blackout.day,Blackout.location,Blackout.period)).all() if manage_locations else []
+    blackout_counts=blackout_request_counts(db,blackouts)
     return page(request,'time_off.html',user=user,rows=rows,names=names,blackouts=blackouts,
-        locations=locations,periods=PERIODS,coverage=coverage,earliest=local_today()+timedelta(days=14),
+        locations=locations,manage_locations=manage_locations,periods=PERIODS,blackout_label=blackout_label,blackout_counts=blackout_counts,earliest=local_today()+timedelta(days=14),
         processing=any(c.status in ('queued','preparing','applying') for c in rows))
 
 
@@ -231,24 +261,32 @@ async def decision(request:Request,change_id:int,db=Depends(get_db)):
 
 @router.post('/time-off/blackouts')
 async def save_blackout(request:Request,db=Depends(get_db)):
-    user=actor_for(request,db);form=await request.form(max_fields=10);csrf(request,form.get('csrf'))
+    user=actor_for(request,db);form=await request.form(max_fields=100);csrf(request,form.get('csrf'))
     feature(db,True);db.refresh(user)
-    location=str(form.get('location',''));period=str(form.get('period',''))
-    if not enabled(db,user) or location not in stands(db,user): raise HTTPException(403,'Choose a stand you manage.')
+    period=str(form.get('period','all_day'))
+    allowed=blackout_stands(db,user)
+    if form.get('all_stands')=='on':
+        if user.role!='admin': raise HTTPException(403,'Only administrators can choose all stands.')
+        selected=allowed
+    else:
+        selected=sorted(set(str(value) for value in form.getlist('locations'))) or [str(form.get('location',''))]
+    if not enabled(db,user) or not selected or any(location not in allowed for location in selected):
+        raise HTTPException(403,'Choose a stand you manage.')
     try:
         day=date.fromisoformat(str(form.get('day','')));maximum=int(str(form.get('maximum','')))
-        closing=int(str(form.get('evening_end','23')));explanation=str(form.get('explanation','')).strip()
+        closing=closing_hour(day);explanation=str(form.get('explanation','')).strip()
         if day<local_today() or period not in PERIODS or not 0<=maximum<=1000 or closing not in (22,23): raise ValueError()
         if not explanation or len(explanation)>500: raise ValueError()
     except ValueError: raise HTTPException(422,'Choose a date, period, limit, and explanation (up to 500 characters).') from None
-    row=db.scalar(select(Blackout).where(Blackout.location==location,Blackout.day==day,Blackout.period==period))
-    if form.get('remove')=='yes':
-        if row: db.delete(row)
-    else:
-        if row is None: row=Blackout(location=location,day=day,period=period);db.add(row)
-        row.maximum=maximum;row.explanation=explanation;row.evening_end=closing
-    db.add(AdminAudit(actor_id=user.id,target_id=user.id,details={'event':'time_off_blackout',
-        'location':location,'day':day.isoformat(),'period':period,'maximum':maximum,'remove':form.get('remove')=='yes'}))
+    for location in selected:
+        row=db.scalar(select(Blackout).where(Blackout.location==location,Blackout.day==day,Blackout.period==period))
+        if form.get('remove')=='yes':
+            if row: db.delete(row)
+        else:
+            if row is None: row=Blackout(location=location,day=day,period=period);db.add(row)
+            row.maximum=maximum;row.explanation=explanation;row.evening_end=closing
+        db.add(AdminAudit(actor_id=user.id,target_id=user.id,details={'event':'time_off_blackout',
+            'location':location,'day':day.isoformat(),'period':period,'maximum':maximum,'remove':form.get('remove')=='yes'}))
     db.commit();return RedirectResponse('/time-off',303)
 
 
