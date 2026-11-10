@@ -91,12 +91,15 @@ def health(db=Depends(get_db)):
     db.execute(text('SELECT 1'))
     return {'status': 'ok'}
 
-def limit_login(request, db, email):
+def limit_login(request, db, email, method=None):
     keys = [digest('email:' + email), digest('ip:' + (request.client.host if request.client else 'unknown'))]
     cutoff = now() - timedelta(minutes=15)
     for key in keys:
         count = db.scalar(select(func.count()).select_from(LoginAttempt).where(LoginAttempt.key == key, LoginAttempt.created > cutoff))
         if count >= 10:
+            if method:
+                from .login_history import record
+                record(db,email,method,'limited')
             raise HTTPException(429, 'Too many sign-in attempts. Try again in 15 minutes.')
     for key in keys: db.add(LoginAttempt(key=key))
     db.commit()
@@ -114,11 +117,13 @@ async def wiw_login_post(request: Request, db=Depends(get_db)):
     password = str(form.get('password',''))
     if not email or not password or len(email)>254 or len(password)>1024:
         raise HTTPException(422, 'Enter your WIW email and password.')
-    limit_login(request, db, email)
+    limit_login(request, db, email, method='wiw')
     try:
         authenticator = WIWAuth()
         wiw_user_id = await run_in_threadpool(authenticator.authenticate, email, password)
     except WIWAuthError as exc:
+        from .login_history import record
+        record(db,email,'wiw',exc.reason)
         return page(request, 'login.html', wiw_login=True, error=str(exc))
     finally:
         # Never persist passwords or WIW tokens in the database/session/audit.
@@ -140,6 +145,8 @@ async def wiw_login_post(request: Request, db=Depends(get_db)):
             db.rollback()
             user = db.scalar(select(User).where(User.wiw_user_id == wiw_user_id))
     if not user or not user.active:
+        from .login_history import record
+        record(db,email,'wiw','disabled' if user else 'not_enabled',user)
         return page(request, 'login.html', wiw_login=True,
             error='Your WIW login is valid, but portal access has not been enabled. Contact your manager.')
     from .notifications import valid_email
@@ -147,6 +154,8 @@ async def wiw_login_post(request: Request, db=Depends(get_db)):
         user.notification_email = email
         db.commit()
     login(request, db, user, remember=remember)
+    from .login_history import record
+    record(db,email,'wiw','success',user)
     return RedirectResponse('/',303)
 
 @app.get('/login')
@@ -165,12 +174,16 @@ async def login_post(request: Request, db=Depends(get_db)):
     email, password = str(form.get('email', '')).strip().lower(), str(form.get('password', ''))
     if len(email) > 254 or len(password) > 1024:
         raise HTTPException(422, 'Invalid login input.')
-    limit_login(request, db, email)
+    limit_login(request, db, email, method='portal')
     user = db.scalar(select(User).where(User.email == email))
     valid = verify(password, user.password_hash if user else DUMMY)
     if not user or not user.active or not valid:
+        from .login_history import record
+        record(db,email,'portal','disabled' if user and not user.active else 'credentials',user)
         return page(request, 'login.html', error='Email or password is incorrect.')
     login(request, db, user, remember=remember)
+    from .login_history import record
+    record(db,email,'portal','success',user)
     return RedirectResponse('/', 303)
 
 @app.post('/logout')

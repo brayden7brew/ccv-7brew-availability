@@ -3,7 +3,9 @@ import httpx
 from .config import settings
 
 class WIWAuthError(Exception):
-    pass
+    def __init__(self, message, reason="wiw_rejected"):
+        super().__init__(message)
+        self.reason = reason
 
 SIGN_IN_FAILED = ('WIW could not complete sign-in. Check your WIW email and password. '
     'If your account requires two-step verification or company SSO, use your portal login or contact the portal administrator.')
@@ -15,14 +17,16 @@ class WIWAuth:
 
     def authenticate(self, email, password):
         if not self.cfg.wiw_developer_key or not self.cfg.wiw_account_id:
-            raise WIWAuthError('WIW sign-in is not configured. Use your portal login.')
+            raise WIWAuthError('WIW sign-in is not configured. Use your portal login.', 'not_configured')
         try:
             with httpx.Client(timeout=20, follow_redirects=False, transport=self.transport) as client:
                 response = client.post('https://api.login.wheniwork.com/login',
                     headers={'W-Key':self.cfg.wiw_developer_key},
                     json={'email':email,'password':password})
                 if response.status_code == 429:
-                    raise WIWAuthError('WIW is limiting sign-in attempts. Wait a few minutes and try again.')
+                    raise WIWAuthError('WIW is limiting sign-in attempts. Wait a few minutes and try again.', 'wiw_limited')
+                if response.status_code >= 500:
+                    raise WIWAuthError('WIW sign-in is temporarily unavailable. Use your portal login or try again later.', 'unavailable')
                 if response.status_code != 200:
                     raise WIWAuthError(SIGN_IN_FAILED)
                 data = response.json()
@@ -37,6 +41,10 @@ class WIWAuth:
                     raise WIWAuthError(SIGN_IN_FAILED)
                 response = client.get('https://api.wheniwork.com/2/login',
                     headers={'Authorization':f'Bearer {token}'})
+                if response.status_code == 429:
+                    raise WIWAuthError('WIW is limiting sign-in attempts. Wait a few minutes and try again.', 'wiw_limited')
+                if response.status_code >= 500:
+                    raise WIWAuthError('WIW sign-in is temporarily unavailable. Use your portal login or try again later.', 'unavailable')
                 if response.status_code != 200:
                     raise WIWAuthError(SIGN_IN_FAILED)
                 memberships = response.json()
@@ -48,10 +56,10 @@ class WIWAuth:
                     and u.get('activated') is True and u.get('is_deleted') is False
                     and type(u.get('id')) is int]
                 if len(matches) != 1:
-                    raise WIWAuthError('Your WIW login does not have an active membership in this portal’s workplace. Contact the portal administrator.')
+                    raise WIWAuthError('Your WIW login does not have an active membership in this portal’s workplace. Contact the portal administrator.', 'membership')
                 member = matches[0]
                 self.display_name = ' '.join(str(member.get(k) or '') for k in ('first_name', 'last_name')).strip()[:120]
                 return member['id']
         except (httpx.HTTPError, ValueError, TypeError):
             # Do not propagate request objects or upstream bodies containing secrets.
-            raise WIWAuthError('WIW sign-in is temporarily unavailable. Use your portal login or try again later.') from None
+            raise WIWAuthError('WIW sign-in is temporarily unavailable. Use your portal login or try again later.', 'unavailable') from None

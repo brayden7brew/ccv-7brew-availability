@@ -1,0 +1,5 @@
+{% extends 'base.html' %}{% block content %}
+<h1>Login history</h1><p>Latest 100 attempts from the last 30 days. Recording starts after this update; earlier failures are not available. An entered email is not proof of who attempted to sign in.</p>
+<form class="card" method="get"><label>Login email<input type="email" name="email" value="{{ email }}" placeholder="Search exact email"></label><button>Search</button> <a href="/admin/login-history">Show all</a></form>
+{% for row in rows %}<article class="card"><strong>{{ labels[row.outcome] }}</strong><p>{{ row.email }} · {{ 'When I Work' if row.method=='wiw' else 'Portal password' }}</p><small>{{ row.created|local_datetime }}</small></article>{% else %}<p>No recorded sign-in attempts found.</p>{% endfor %}
+<a href="/admin">Return to people</a>{% endblock %}

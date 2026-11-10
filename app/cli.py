@@ -4,7 +4,7 @@ import getpass
 from datetime import timedelta
 from sqlalchemy import select, delete
 from .db import SessionLocal
-from .models import User, Scope, LoginSession, LoginAttempt, Change, now
+from .models import User, Scope, LoginSession, LoginAttempt, LoginEvent, Change, now
 from .security import hasher
 from .workflow import audit
 from .wiw import WIW
@@ -91,6 +91,7 @@ def main():
                 if args.remove and existing: db.delete(existing)
                 elif not args.remove and not existing: db.add(Scope(manager_id=user.id, location=args.location))
         elif args.command == 'cleanup':
+            db.execute(delete(LoginEvent).where(LoginEvent.created < now()-timedelta(days=30)))
             db.execute(delete(LoginSession).where(LoginSession.expires < now()))
             db.execute(delete(LoginAttempt).where(LoginAttempt.created < now()-timedelta(days=1)))
         elif args.command == 'unresolved':

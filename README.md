@@ -349,3 +349,8 @@ An uncertain POST/readback remains `needs_reconciliation`, and is never replayed
 automatically. Use `inspect-request --id ...` to read its journal and review the
 WIW time-off record. Existing availability recovery commands cannot reconcile
 these records. Do not resubmit an uncertain request as a recovery method.
+
+
+### Admin login diagnostics
+
+Admin → Login history shows the latest 100 attempts from the last 30 days, searchable by exact entered email. Employee admin pages show portal password/setup status and link to history. History starts at deployment; it cannot reconstruct earlier failures. Stored data is limited to entered email, optional matched user ID, method, timestamp, and fixed outcome code. No passwords, setup codes, tokens, IP addresses, or upstream response bodies are recorded. Entered emails are unverified until sign-in succeeds. Generic WIW rejection does not distinguish incorrect credentials from MFA/SSO. History is purged after 30 days on the next recorded attempt or via `python -m app.cli cleanup`.

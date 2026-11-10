@@ -18,7 +18,7 @@ def require_admin(request, db):
 
 def directory_filters(request):
     from urllib.parse import urlencode
-    values={k:request.query_params.get(k,'').strip()[:254] for k in ('q','location','role','show_disabled','p')}
+    values={k:request.query_params.get(k,'').strip()[:254] for k in ('q','location','role','show_disabled','login_method','p')}
     values['show_disabled'] = '1' if values['show_disabled'] == '1' else ''
     return values, urlencode({k:v for k,v in values.items() if v})
 
@@ -35,6 +35,14 @@ def admin_page(request: Request, db=Depends(get_db)):
     if filters['location']:
         conditions.append(or_(User.location==filters['location'],User.secondary_location==filters['location']))
     if filters['role'] in ('employee','manager','admin'): conditions.append(User.role==filters['role'])
+    from datetime import timedelta
+    from .models import LoginEvent, now
+    if filters['login_method']=='portal_enabled':
+        conditions.append(User.password_hash.startswith('$argon2'))
+    elif filters['login_method']=='portal_used':
+        conditions.append(select(LoginEvent.id).where(LoginEvent.user_id==User.id,
+            LoginEvent.method=='portal',LoginEvent.outcome=='success',
+            LoginEvent.created>=now()-timedelta(days=30)).exists())
     if not filters['show_disabled']: conditions.append(User.active.is_(True))
     total=db.scalar(select(func.count()).select_from(User).where(*conditions))
     pages=max(1,(total+24)//25)
@@ -43,13 +51,17 @@ def admin_page(request: Request, db=Depends(get_db)):
     filters['p']=str(number)
     query=urlencode({k:v for k,v in filters.items() if v})
     people=list(db.scalars(select(User).where(*conditions).order_by(func.lower(User.name),User.id).offset((number-1)*25).limit(25)))
+    portal_last_used=dict(db.execute(select(LoginEvent.user_id,func.max(LoginEvent.created)).where(
+        LoginEvent.user_id.in_([person.id for person in people]),LoginEvent.method=='portal',
+        LoginEvent.outcome=='success',LoginEvent.created>=now()-timedelta(days=30)
+    ).group_by(LoginEvent.user_id)).all())
     def page_url(n): return '/admin?'+urlencode({**{k:v for k,v in filters.items() if v},'p':n})
     history=list(db.scalars(select(AdminAudit).order_by(AdminAudit.id.desc()).limit(30)))
     ids={v for h in history for v in (h.actor_id,h.target_id)}
     names=dict(db.execute(select(User.id,User.name).where(User.id.in_(ids))).all()) if ids else {}
     from .time_off import feature
     from .wiw_tokens import connection_status
-    return page(request,'admin.html',time_off_settings=feature(db),wiw_connection=connection_status(db),user=actor,people=people,history=history,names=names,
+    return page(request,'admin.html',time_off_settings=feature(db),wiw_connection=connection_status(db),user=actor,people=people,portal_last_used=portal_last_used,history=history,names=names,
         notification_scopes=sorted(set(db.scalars(select(Scope.location).where(Scope.manager_id==actor.id))) | set(assigned_locations(actor))),
         locations=location_choices(db),filters=filters,directory_query=query,total=total,page_number=number,pages=pages,
         previous_url=page_url(number-1),next_url=page_url(number+1),
@@ -82,7 +94,8 @@ def person_page(request: Request,user_id:int,db=Depends(get_db)):
     history=list(db.scalars(select(AdminAudit).where(AdminAudit.target_id==user_id).order_by(AdminAudit.id.desc()).limit(20)))
     ids={h.actor_id for h in history}
     names=dict(db.execute(select(User.id,User.name).where(User.id.in_(ids))).all()) if ids else {}
-    return page(request,'admin_person.html',user=actor,person=person,locations=location_choices(db),
+    from .login_history import setup_status
+    return page(request,'admin_person.html',setup_status=setup_status(db,person),user=actor,person=person,locations=location_choices(db),
         availability_rows=availability_rows,availability_error=availability_error,
         scopes={person.id:list(db.scalars(select(Scope.location).where(Scope.manager_id==user_id)))},
         directory_query=query,back_url='/admin'+('?' + query if query else ''),history=history,names=names)
@@ -293,3 +306,18 @@ async def person_notifications(request: Request, user_id: int, db=Depends(get_db
         'event':'person_notifications', 'before':before, 'after':person.notifications_enabled}))
     db.commit()
     return RedirectResponse(f'/admin/users/{user_id}?'+directory_filters(request)[1]+'&notifications_saved=1',303)
+
+
+@router.get('/admin/login-history')
+def login_history_page(request: Request, db=Depends(get_db)):
+    from datetime import timedelta
+    from .main import page
+    from .models import LoginEvent, now
+    from .login_history import LABELS
+    actor = require_admin(request, db)
+    email = request.query_params.get('email', '').strip().lower()[:254]
+    query = select(LoginEvent).where(LoginEvent.created >= now()-timedelta(days=30))
+    if email:
+        query = query.where(LoginEvent.email == email)
+    rows = db.scalars(query.order_by(LoginEvent.id.desc()).limit(100)).all()
+    return page(request, 'login_history.html', user=actor, rows=rows, email=email, labels=LABELS)

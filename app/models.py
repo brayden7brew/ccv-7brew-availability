@@ -172,3 +172,13 @@ class Blackout(Base):
     maximum: Mapped[int] = mapped_column(Integer)
     explanation: Mapped[str] = mapped_column(String(500))
     evening_end: Mapped[int] = mapped_column(Integer, default=23, server_default='23')
+
+
+class LoginEvent(Base):
+    __tablename__ = 'login_events'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(254), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True)
+    method: Mapped[str] = mapped_column(String(20))
+    outcome: Mapped[str] = mapped_column(String(40))
+    created: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
