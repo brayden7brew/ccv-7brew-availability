@@ -18,7 +18,7 @@ from .weekly_workflow import dispatch_weekly
 from .wiw import WIWError
 
 
-def replacement_plan(original, current, deleted, truncated, effective, future, recovery_day):
+def replacement_plan(original, current, deleted, truncated, effective, future, recovery_day, historical_external_ids=()):
     """Validate observed changes, then preserve the original prefix exactly."""
     cutoff = datetime.combine(effective, time(), ZoneInfo(settings().business_timezone))
     old = {e['id']: e for e in original}
@@ -30,7 +30,17 @@ def replacement_plan(original, current, deleted, truncated, effective, future, r
     for key, event in live.items():
         if key != truncated:
             if event != old[key]:
-                raise ValueError('An unattempted event changed. No writes performed.')
+                # WIW's expanded occurrence list slides with its read window.
+                # Only ignore this cache on verified, fully historical external
+                # series; every stored field (including RRULE) must still match.
+                today_start = datetime.combine(recovery_day, time(), cutoff.tzinfo)
+                cache_only = (key in historical_external_ids
+                    and {k:v for k,v in event.items() if k != 'events'} ==
+                        {k:v for k,v in old[key].items() if k != 'events'}
+                    and all(datetime.fromisoformat(item[2]) <= today_start
+                            for item in finite_occurrences([event])))
+                if not cache_only:
+                    raise ValueError('An unattempted event changed. No writes performed.')
             continue
         # Only accept the observed DELETE behavior: unchanged hours with an
         # absolute recurrence end. Do not excuse other edits or added exclusions.
@@ -152,7 +162,7 @@ def repair_truncated_delete(db, actor, change_id, provider, apply=False):
         if provider.get(event['id'],change.wiw_user_id)!=event:
             raise ValueError('WIW changed during inspection.')
     operations,retained,restored,past_missing=replacement_plan(original,current['availabilityevents'],deleted,
-        ops[count-1]['event_id'],effective,event_plan([change.proposed]),local_today())
+        ops[count-1]['event_id'],effective,event_plan([change.proposed]),local_today(),historical_external_ids=external_ids)
     if canonical(provider.read(change.wiw_user_id,change.read_start,change.read_end))!=canonical(current):
         raise ValueError('WIW changed during inspection.')
     if not apply:

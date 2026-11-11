@@ -52,7 +52,7 @@ def test_refuses_unexplained_changes(mutation):
     with pytest.raises(ValueError): plan(old,current,future)
 
 
-@pytest.mark.parametrize('external_case', ['none', 'historical', 'changed', 'future', 'unaccounted'])
+@pytest.mark.parametrize('external_case', ['none', 'historical', 'window', 'changed', 'future', 'unaccounted'])
 def test_preview_then_apply_journals_and_verifies_complete_repair(db,monkeypatch,external_case):
     from datetime import datetime, timezone
     from sqlalchemy import select
@@ -76,6 +76,10 @@ def test_preview_then_apply_journals_and_verifies_complete_repair(db,monkeypatch
         old += deepcopy(external)
         current += deepcopy(external)
         if external_case == 'changed': current[-1]['notes']='edited elsewhere'
+        if external_case == 'window':
+            old[-1]['events']=[{'start':'2026-08-03T00:00:00-04:00'}]
+            external[-1]['events']=deepcopy(old[-1]['events'])
+            current[-1]['events']=[]
     old_days=[dict(mode='none'),dict(mode='none'),dict(mode='unavailable',start='05:00',end='17:30'),
               dict(mode='unavailable',start='05:00',end='14:00'),dict(mode='unavailable',start='05:00',end='12:00'),
               dict(mode='unavailable',start='05:00',end='14:00'),
@@ -127,7 +131,7 @@ def test_preview_then_apply_journals_and_verifies_complete_repair(db,monkeypatch
     result=repair_truncated_delete(db,actor,change.id,api,apply=True)
     assert result.status=='applied'
     for event in external:
-        assert api.events[event['id']] == event
+        assert api.events[event['id']] == next(e for e in current if e['id']==event['id'])
         assert not any(op.get('event_id') == event['id'] for op in api.writes)
     assert db.scalar(select(WeeklySchedule).where(WeeklySchedule.change_id==change.id))
     assert all(not m.active for m in db.scalars(select(ManagedEvent).where(ManagedEvent.event_id.in_(order))))
