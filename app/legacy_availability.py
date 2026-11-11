@@ -2,7 +2,7 @@
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from dateutil.parser import parse
-from dateutil.rrule import rrulestr
+from .recurrence import parse_recurrence
 from .config import settings
 
 
@@ -33,7 +33,7 @@ def handover(events, effective):
             if '\n' in rule or '\r' in rule:
                 raise ValueError()
             rule = rule.removeprefix('RRULE:').upper()
-            recurrence = rrulestr(rule, dtstart=start.astimezone(cutoff.tzinfo))
+            recurrence = parse_recurrence(rule, dtstart=start.astimezone(cutoff.tzinfo))
             duration = end.astimezone(cutoff.tzinfo) - start.astimezone(cutoff.tzinfo)
             count = 0
             future = False

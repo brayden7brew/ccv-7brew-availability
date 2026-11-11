@@ -34,7 +34,7 @@ def finite_occurrences(events, before=None):
     Never sample an infinite tail or round a timed interval.
     """
     from collections import Counter
-    from dateutil.rrule import rrulestr
+    from .recurrence import parse_recurrence
     result = Counter()
     zone = ZoneInfo(settings().business_timezone)
     for event in events:
@@ -47,7 +47,7 @@ def finite_occurrences(events, before=None):
             parts = rule.removeprefix('RRULE:').upper().split(';')
             if before is None and not any(p.startswith(('COUNT=', 'UNTIL=')) for p in parts):
                 raise ValueError('Unbounded series cannot confirm a finite handover.')
-            occurrences = rrulestr(rule, dtstart=start)
+            occurrences = parse_recurrence(rule, dtstart=start)
         else:
             occurrences = [start]
         for index, occurrence in enumerate(occurrences):

@@ -2,7 +2,7 @@
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 from dateutil.parser import parse
-from dateutil.rrule import rrulestr
+from .recurrence import parse_recurrence
 from .config import settings
 
 
@@ -19,7 +19,7 @@ def preview(events, today):
         if event.get('all_day') and end.time() == time(23,59,59): end += timedelta(seconds=1)
         duration = end-start
         rule = event.get('recurrence') or ''
-        occurrences = rrulestr(rule.removeprefix('RRULE:'), dtstart=start).between(first-duration,last,inc=True) if rule else [start]
+        occurrences = parse_recurrence(rule, dtstart=start).between(first-duration,last,inc=True) if rule else [start]
         blocked.extend((value,value+duration) for value in occurrences if value < last and value+duration > first)
     rows=[]
     def label(value): return value.strftime('%I:%M %p').lstrip('0')
