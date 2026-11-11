@@ -354,3 +354,21 @@ these records. Do not resubmit an uncertain request as a recovery method.
 ### Admin login diagnostics
 
 Admin → Login history shows the latest 100 attempts from the last 30 days, searchable by exact entered email. Employee admin pages show portal password/setup status and link to history. History starts at deployment; it cannot reconstruct earlier failures. Stored data is limited to entered email, optional matched user ID, method, timestamp, and fixed outcome code. No passwords, setup codes, tokens, IP addresses, or upstream response bodies are recorded. Entered emails are unverified until sign-in succeeds. Generic WIW rejection does not distinguish incorrect credentials from MFA/SSO. History is purged after 30 days on the next recorded attempt or via `python -m app.cli cleanup`.
+
+### Repair a truncated recurring deletion
+
+For a weekly request stopped after a delete-only prefix, where WIW retained a
+shortened historical series, preview the guarded recovery with:
+
+```sh
+python -m app.cli repair-truncated-delete --id REQUEST_ID --manager-email ADMIN_EMAIL
+```
+
+Review the preview before running the same command with `--apply`. Recovery
+requires unchanged unattempted records and the original approved timeline. It
+restores missing occurrences from today onward before the requested start date,
+ends remaining old series at that date, then creates the approved new schedule.
+It never repeats DELETE. Missing occurrences that already ended before today are
+reported and recorded in the recovery audit, not recreated with backdated writes.
+The command refuses previous recovery attempts or unexpected state changes. Any
+uncertain write stops processing for inspection; do not retry or reset its status.

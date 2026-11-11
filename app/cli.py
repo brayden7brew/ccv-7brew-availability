@@ -64,6 +64,10 @@ def main():
     split = commands.add_parser('repair-split-update')
     split.add_argument('--id', type=int, required=True)
     split.add_argument('--manager-email', required=True)
+    trunc = commands.add_parser('repair-truncated-delete')
+    trunc.add_argument('--id', type=int, required=True)
+    trunc.add_argument('--manager-email', required=True)
+    trunc.add_argument('--apply', action='store_true')
     reconcile = commands.add_parser('reconcile')
     reconcile.add_argument('--id', type=int, required=True)
     reconcile.add_argument('--manager-email', required=True)
@@ -176,6 +180,17 @@ def main():
             except (ValueError, WIWError) as exc:
                 raise SystemExit(str(exc))
             print(f'Request #{change.id}: {change.status}')
+        elif args.command == 'repair-truncated-delete':
+            from .truncated_delete_recovery import repair_truncated_delete
+            from .wiw import WIWError
+            actor = db.scalar(select(User).where(User.email == args.manager_email.lower(),
+                User.role.in_(['manager','admin']), User.active.is_(True)))
+            if not actor: raise SystemExit('Active manager or administrator required.')
+            try:
+                result = repair_truncated_delete(db, actor, args.id, WIW(), apply=args.apply)
+            except (ValueError, WIWError) as exc: raise SystemExit(str(exc))
+            if args.apply: print(f'Request #{result.id}: {result.status}')
+            else: print(result)
         elif args.command == 'reconcile':
             change = db.scalar(select(Change).where(Change.id == args.id).with_for_update())
             actor = db.scalar(select(User).where(User.email == args.manager_email.lower(), User.role.in_(['manager','admin']), User.active.is_(True)))
