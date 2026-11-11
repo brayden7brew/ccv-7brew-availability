@@ -52,7 +52,8 @@ def test_refuses_unexplained_changes(mutation):
     with pytest.raises(ValueError): plan(old,current,future)
 
 
-def test_preview_then_apply_journals_and_verifies_complete_repair(db,monkeypatch):
+@pytest.mark.parametrize('external_case', ['none', 'historical', 'changed', 'future', 'unaccounted'])
+def test_preview_then_apply_journals_and_verifies_complete_repair(db,monkeypatch,external_case):
     from datetime import datetime, timezone
     from sqlalchemy import select
     from app.models import User,Change,Audit,ManagedEvent,WeeklySchedule
@@ -65,6 +66,16 @@ def test_preview_then_apply_journals_and_verifies_complete_repair(db,monkeypatch
     monkeypatch.setattr('app.truncated_delete_recovery.local_today',lambda:date(2026,11,11))
     monkeypatch.setattr('app.weekly.local_today',lambda:date(2026,11,11))
     old,current,future=state()
+    external=[]
+    if external_case != 'none':
+        external=[dict(id=139,type=1,start_time='2026-08-03T00:00:00-04:00',
+            end_time='2026-08-04T00:00:00-04:00',all_day=True,
+            recurrence='FREQ=WEEKLY;UNTIL=20261102T045959Z;BYDAY=MO')]
+        if external_case == 'future':
+            external[0]['recurrence']='FREQ=WEEKLY;UNTIL=20261202T045959Z;BYDAY=MO'
+        old += deepcopy(external)
+        current += deepcopy(external)
+        if external_case == 'changed': current[-1]['notes']='edited elsewhere'
     old_days=[dict(mode='none'),dict(mode='none'),dict(mode='unavailable',start='05:00',end='17:30'),
               dict(mode='unavailable',start='05:00',end='14:00'),dict(mode='unavailable',start='05:00',end='12:00'),
               dict(mode='unavailable',start='05:00',end='14:00'),
@@ -84,12 +95,12 @@ def test_preview_then_apply_journals_and_verifies_complete_repair(db,monkeypatch
     ops=[{'action':'delete','event_id':key} for key in order]+[
         {'action':'create','payload':p,'rfc_dates':True} for p in event_plan([old_profile,proposed],today=date(2026,11,4))]
     db.add(Audit(change_id=change.id,actor_id=2,event='approved',created=datetime(2026,11,4,17,tzinfo=timezone.utc),
-        details={'operations':ops,'pre_write_state':{'availabilityevents':old},'managed_event_snapshots':old,'retained_external_events':[]}))
+        details={'operations':ops,'pre_write_state':{'availabilityevents':old},'managed_event_snapshots':old,'retained_external_events':external if external_case != 'unaccounted' else []}))
     db.flush()
     for i in range(3):
         db.add(Audit(change_id=change.id,actor_id=2,event='operation_started',details={'index':i,'operation':ops[i]}));db.flush()
         db.add(Audit(change_id=change.id,actor_id=2,event='write_uncertain' if i==2 else 'operation_succeeded',details={'index':i}));db.flush()
-    for event in old: db.add(ManagedEvent(employee_id=1,event_id=event['id'],snapshot=event,active=event['id'] not in (683,684)))
+    for event in old[:8]: db.add(ManagedEvent(employee_id=1,event_id=event['id'],snapshot=event,active=event['id'] not in (683,684)))
     db.get(User,2).role='admin';db.commit()
     class Provider:
         def __init__(self): self.events={e['id']:deepcopy(e) for e in current};self.writes=[];self.key=1000
@@ -106,11 +117,44 @@ def test_preview_then_apply_journals_and_verifies_complete_repair(db,monkeypatch
             self.key+=1;self.events[self.key]={'id':self.key,**op['payload']}
             return {'availabilityevent':deepcopy(self.events[self.key])}
     api=Provider();actor=db.get(User,2)
+    if external_case in ('changed','future','unaccounted'):
+        with pytest.raises(ValueError): repair_truncated_delete(db,actor,change.id,api,apply=True)
+        assert not api.writes and change.status=='needs_reconciliation'
+        return
     preview=repair_truncated_delete(db,actor,change.id,api)
     assert preview['restore_occurrences']==3 and preview['past_missing_occurrences_not_recreated']==3
     assert not api.writes and change.status=='needs_reconciliation'
     result=repair_truncated_delete(db,actor,change.id,api,apply=True)
     assert result.status=='applied'
+    for event in external:
+        assert api.events[event['id']] == event
+        assert not any(op.get('event_id') == event['id'] for op in api.writes)
     assert db.scalar(select(WeeklySchedule).where(WeeklySchedule.change_id==change.id))
     assert all(not m.active for m in db.scalars(select(ManagedEvent).where(ManagedEvent.event_id.in_(order))))
     with pytest.raises(ValueError): repair_truncated_delete(db,actor,change.id,api,apply=True)
+
+
+def test_november_15_repair_preserves_legacy_history_and_saturday():
+    # Request 146: only Nov 8/9 were lost; Nov 14 must remain until handover.
+    legacy=[dict(id=139,type=1,start_time='2026-08-03T00:00:00-04:00',
+        end_time='2026-08-04T00:00:00-04:00',all_day=True,
+        recurrence='FREQ=WEEKLY;UNTIL=20261102T045959Z;BYDAY=MO'),
+        dict(id=192,type=1,start_time='2026-08-09T05:00:00-04:00',
+        end_time='2026-08-09T14:00:00-04:00',all_day=False,
+        recurrence='FREQ=WEEKLY;UNTIL=20261102T045959Z;BYDAY=SU')]
+    original=legacy+[
+        dict(id=589,type=1,start_time='2026-11-08T05:00:00-05:00',end_time='2026-11-08T15:00:00-05:00',all_day=False,recurrence='FREQ=WEEKLY;BYDAY=SU'),
+        dict(id=590,type=1,start_time='2026-11-02T00:00:00-05:00',end_time='2026-11-03T00:00:00-05:00',all_day=True,recurrence='FREQ=WEEKLY;BYDAY=MO'),
+        dict(id=592,type=1,start_time='2026-11-07T18:00:00-05:00',end_time='2026-11-07T23:00:00-05:00',all_day=False,recurrence='FREQ=WEEKLY;BYDAY=SA')]
+    current=deepcopy(legacy+original[3:])
+    current[2]['recurrence']='FREQ=WEEKLY;UNTIL=20261105T045959Z;BYDAY=MO'
+    from app.weekly import event_plan
+    days=[{'mode':'none'} if i in (0,1,4) else {'mode':'all_day'} for i in range(7)]
+    future=event_plan([{'effective_date':'2026-11-15','days':days}],today=date(2026,11,11))
+    ops,retained,restored,past=replacement_plan(original,current,{589},590,date(2026,11,15),future,date(2026,11,11))
+    assert restored == 0 and len(past)==2
+    assert len(future)==3
+    assert [op['event_id'] for op in ops if op['action']=='update']==[592]
+    assert all(event in retained for event in legacy)
+    saturday=finite_occurrences([e for e in retained if e['id']==592])
+    assert {key[1][:10] for key in saturday}=={'2026-11-07','2026-11-14'}

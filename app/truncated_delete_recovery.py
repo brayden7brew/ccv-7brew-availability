@@ -117,10 +117,23 @@ def repair_truncated_delete(db, actor, change_id, provider, apply=False):
             raise ValueError('Recovery requires successful deletes followed by one uncertain delete.')
     original=approval.details['pre_write_state']['availabilityevents']
     original_ids={e['id'] for e in original}
-    if (approval.details.get('retained_external_events') or
-            {op['event_id'] for op in ops if op['action']=='delete'}!=original_ids or
-            any(op['action'] not in ('delete','create') for op in ops)):
-        raise ValueError('Approval is not a complete managed-schedule replacement.')
+    # External records may be retained only when the approved snapshot is
+    # unchanged and all their occurrences precede the new schedule. They stay
+    # in the complete readback comparison and are never deleted or rewritten.
+    external = approval.details.get('retained_external_events') or []
+    external_ids = {e['id'] for e in external}
+    delete_ids = [op['event_id'] for op in ops if op['action']=='delete']
+    originals = {e['id']: e for e in original}
+    if (len(external_ids) != len(external) or len(originals) != len(original)
+            or len(set(delete_ids)) != len(delete_ids)
+            or external_ids & set(delete_ids)
+            or external_ids | set(delete_ids) != original_ids
+            or any(e != originals.get(e['id']) for e in external)
+            or any(op['action'] not in ('delete','create') for op in ops)):
+        raise ValueError('Approval is not a verified managed replacement with unchanged retained records.')
+    cutoff = datetime.combine(effective, time(), ZoneInfo(cfg.business_timezone))
+    if finite_occurrences(external) != finite_occurrences(external, before=cutoff):
+        raise ValueError('Retained external availability extends into the new schedule.')
     approved_day=approval.created.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(cfg.business_timezone)).date()
     expected=event_plan([display_schedule(r) for r in rows]+[change.proposed], today=approved_day)
     if Counter(map(event_signature,expected))!=Counter(event_signature(op['payload']) for op in ops if op['action']=='create'):

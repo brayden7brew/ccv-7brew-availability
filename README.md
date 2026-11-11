@@ -365,7 +365,9 @@ python -m app.cli repair-truncated-delete --id REQUEST_ID --manager-email ADMIN_
 ```
 
 Review the preview before running the same command with `--apply`. Recovery
-requires unchanged unattempted records and the original approved timeline. It
+requires unchanged unattempted records and the original approved timeline. Older
+external records are supported only when their saved snapshots are unchanged and
+all their occurrences end before the new schedule; these records are preserved. It
 restores missing occurrences from today onward before the requested start date,
 ends remaining old series at that date, then creates the approved new schedule.
 It never repeats DELETE. Missing occurrences that already ended before today are
