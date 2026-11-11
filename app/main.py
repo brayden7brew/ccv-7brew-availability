@@ -201,11 +201,15 @@ def dashboard(request: Request, page_number: int = 1, db=Depends(get_db)):
     user = current_user(request, db)
     if page_number < 1 or page_number > 100000: raise HTTPException(422, 'Invalid page.')
     locations = list(db.scalars(select(Scope.location).where(Scope.manager_id == user.id))) if user.role in ('manager','admin') else []
-    changes = db.scalars(select(Change).where(Change.action != 'time_off', ~select(Audit.id).where(
+    visible = select(Change).where(Change.action != 'time_off', ~select(Audit.id).where(
         Audit.change_id == Change.id, Audit.event == 'employee_archived').exists(), or_(Change.employee_id == user.id,
-        Change.location.in_(locations))).order_by(Change.created.desc()).offset((page_number-1)*50).limit(50)).all()
-    names = {u.id: u.name for u in db.scalars(select(User).where(User.id.in_({c.employee_id for c in changes}))).all()}
-    return page(request, 'dashboard.html', processing=any(c.status in ('queued','preparing','applying') for c in changes), user=user, changes=changes, names=names, page_number=page_number, usage=request_usage(db, user.id),
+        Change.location.in_(locations)))
+    changes = db.scalars(visible.order_by(Change.created.desc(), Change.id.desc()).offset((page_number-1)*50).limit(50)).all()
+    attention = db.scalars(visible.where(Change.status.in_(['pending', 'approval_failed', 'needs_reconciliation']),
+        or_(Change.status != 'pending', Change.employee_id != user.id))
+        .order_by(Change.created.desc(), Change.id.desc())).all() if page_number == 1 and user.role in ('manager','admin') else []
+    names = {u.id: u.name for u in db.scalars(select(User).where(User.id.in_({c.employee_id for c in [*changes, *attention]}))).all()}
+    return page(request, 'dashboard.html', processing=any(c.status in ('queued','preparing','applying') for c in changes), user=user, changes=changes, attention=attention, names=names, page_number=page_number, usage=request_usage(db, user.id),
         employee_usage={i:request_usage(db, i) for i in names})
 
 def date_range(start=None, end=None):
