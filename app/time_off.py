@@ -53,6 +53,12 @@ def blackout_stands(db,user):
     return stands(db,user)
 
 
+def can_manage_all_blackouts(db,user):
+    from .locations import location_choices
+    locations={name for name in location_choices(db) if name}
+    return bool(locations and locations.issubset(set(blackout_stands(db,user))))
+
+
 def can_review(db,user,change):
     return (user.role in ('manager','admin') and change.location in stands(db,user)
             and (user.id!=change.employee_id or user.role=='admin'))
@@ -205,7 +211,7 @@ def index(request:Request,db=Depends(get_db)):
     personal_access=enabled(db,user)
     if not personal_access: rows=[]
     return page(request,'time_off.html',user=user,rows=rows,names=names,blackouts=blackouts,
-        personal_access=personal_access,locations=locations,manage_locations=manage_locations,periods=PERIODS,blackout_label=blackout_label,blackout_counts=blackout_counts,earliest=local_today()+timedelta(days=14),
+        can_manage_all_blackouts=can_manage_all_blackouts(db,user),personal_access=personal_access,locations=locations,manage_locations=manage_locations,periods=PERIODS,blackout_label=blackout_label,blackout_counts=blackout_counts,earliest=local_today()+timedelta(days=14),
         processing=any(c.status in ('queued','preparing','applying') for c in rows))
 
 
@@ -273,7 +279,7 @@ async def save_blackout(request:Request,db=Depends(get_db)):
     period=str(form.get('period','all_day'))
     allowed=blackout_stands(db,user)
     if form.get('all_stands')=='on':
-        if user.role!='admin': raise HTTPException(403,'Only administrators can choose all stands.')
+        if not can_manage_all_blackouts(db,user): raise HTTPException(403,'You must manage every stand to choose all stands.')
         selected=allowed
     else:
         selected=sorted(set(str(value) for value in form.getlist('locations'))) or [str(form.get('location',''))]

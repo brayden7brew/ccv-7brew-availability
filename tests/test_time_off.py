@@ -411,3 +411,28 @@ def test_employee_cannot_manage_blackouts(client,db,pilot):
     assert 'Manage blackout dates' not in client.get('/time-off').text
     assert client.post('/time-off/blackouts',data={'csrf':csrf,'location':'North',
         'day':str(local_today()+timedelta(days=20)),'maximum':'2','explanation':'Holiday'}).status_code==403
+
+
+def test_all_stand_manager_can_bulk_manage_blackouts(client,db,pilot):
+    from app.models import Scope, Location
+    from app.locations import location_choices
+    manager=db.get(User,2)
+    existing=set(db.scalars(select(Scope.location).where(Scope.manager_id==manager.id)))
+    for location in location_choices(db):
+        if location and location not in existing:
+            db.add(Scope(manager_id=manager.id,location=location))
+    db.commit()
+    csrf=sign_in(client,'manager@test.local')
+    assert 'name="all_stands"' in client.get('/time-off').text
+    payload={'csrf':csrf,'day':str(local_today()+timedelta(days=20)),
+             'maximum':'2','explanation':'Holiday','all_stands':'on'}
+    assert client.post('/time-off/blackouts',data=payload).status_code==200
+    assert set(db.scalars(select(Blackout.location)))==set(location_choices(db))
+    assert client.post('/time-off/blackouts',data={**payload,'maximum':'4'}).status_code==200
+    assert all(row.maximum==4 for row in db.scalars(select(Blackout)))
+    assert client.post('/time-off/blackouts',data={**payload,'remove':'yes'}).status_code==200
+    assert db.scalar(select(Blackout)) is None
+    assert db.get(User,2).role=='manager'
+    db.add(Location(name='New stand'));db.commit()
+    assert 'name="all_stands"' not in client.get('/time-off').text
+    assert client.post('/time-off/blackouts',data=payload).status_code==403
