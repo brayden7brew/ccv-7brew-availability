@@ -50,7 +50,8 @@ def test_feature_off_even_for_admin_and_individual_grants(client,db):
     db.get(User,2).role='admin';db.commit();csrf=sign_in(client,'manager@test.local')
     assert client.get('/time-off').status_code==403
     db.add(TimeOffSettings(id=1,enabled=True,everyone=False));db.commit()
-    assert client.get('/time-off').status_code==403
+    assert client.get('/time-off').status_code==200
+    assert 'data-time-off-form' not in client.get('/time-off').text
     db.get(User,2).time_off_access=True;db.commit()
     assert client.get('/time-off').status_code==200
     response=client.post('/admin/time-off',data={'csrf':csrf,'enabled':'on','everyone':'on'})
@@ -381,3 +382,32 @@ def test_blackout_list_counts_requests_approved_and_caps_by_stand_and_period(cli
     html=client.get('/time-off?check_date=invalid').text
     assert '<h2>Blackout dates</h2>' not in html
     assert '<dt>Requests</dt>' not in html
+
+
+def test_manager_blackouts_without_personal_time_off_access(client,db,pilot):
+    db.get(User,2).time_off_access=False;db.commit()
+    csrf=sign_in(client,'manager@test.local')
+    assert 'href="/time-off"' in client.get('/').text
+    html=client.get('/time-off').text
+    assert 'Manage blackout dates' in html and 'data-time-off-form' not in html
+    payload={'csrf':csrf,'location':'North','day':str(local_today()+timedelta(days=20)),
+             'maximum':'2','explanation':'Holiday'}
+    assert client.post('/time-off/blackouts',data=payload).status_code==200
+    row=db.scalar(select(Blackout));assert row.maximum==2
+    assert 'Holiday' in client.get('/time-off').text
+    assert client.post('/time-off/blackouts',data={**payload,'maximum':'3'}).status_code==200
+    db.refresh(row);assert row.maximum==3
+    assert client.post('/time-off/blackouts',data={**payload,'location':'South'}).status_code==403
+    assert client.post('/time-off',data=data(csrf)).status_code==403
+    assert client.post('/time-off/blackouts',data={**payload,'remove':'yes'}).status_code==200
+    assert db.scalar(select(Blackout)) is None
+    db.get(TimeOffSettings,1).enabled=False;db.commit()
+    assert client.get('/time-off').status_code==403
+    assert client.post('/time-off/blackouts',data=payload).status_code==403
+
+
+def test_employee_cannot_manage_blackouts(client,db,pilot):
+    csrf=sign_in(client)
+    assert 'Manage blackout dates' not in client.get('/time-off').text
+    assert client.post('/time-off/blackouts',data={'csrf':csrf,'location':'North',
+        'day':str(local_today()+timedelta(days=20)),'maximum':'2','explanation':'Holiday'}).status_code==403

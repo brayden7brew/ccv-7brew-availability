@@ -30,9 +30,14 @@ def enabled(db,user):
     return bool(state and state.enabled and user.active and (state.everyone or user.time_off_access))
 
 
-def actor_for(request,db):
+def blackout_enabled(db,user):
+    state=feature(db)
+    return bool(state and state.enabled and user.active and blackout_stands(db,user))
+
+
+def actor_for(request,db,*,management=False):
     user=current_user(request,db)
-    if not enabled(db,user): raise HTTPException(403,'Time off is not enabled for your account.')
+    if not (enabled(db,user) or (management and blackout_enabled(db,user))): raise HTTPException(403,'Time off is not enabled for your account.')
     return user
 
 
@@ -187,7 +192,7 @@ def blackout_request_counts(db,blackouts):
 @router.get('/time-off')
 def index(request:Request,db=Depends(get_db)):
     from .main import page
-    user=actor_for(request,db);locations=stands(db,user)
+    user=actor_for(request,db,management=True);locations=stands(db,user)
     manage_locations=blackout_stands(db,user)
     rows=db.scalars(select(Change).where(Change.action=='time_off',
         or_(Change.employee_id==user.id,Change.location.in_(locations)),
@@ -197,8 +202,10 @@ def index(request:Request,db=Depends(get_db)):
     blackouts=db.scalars(select(Blackout).where(Blackout.location.in_(manage_locations),
                        Blackout.day>=local_today()).order_by(Blackout.day,Blackout.location,Blackout.period)).all() if manage_locations else []
     blackout_counts=blackout_request_counts(db,blackouts)
+    personal_access=enabled(db,user)
+    if not personal_access: rows=[]
     return page(request,'time_off.html',user=user,rows=rows,names=names,blackouts=blackouts,
-        locations=locations,manage_locations=manage_locations,periods=PERIODS,blackout_label=blackout_label,blackout_counts=blackout_counts,earliest=local_today()+timedelta(days=14),
+        personal_access=personal_access,locations=locations,manage_locations=manage_locations,periods=PERIODS,blackout_label=blackout_label,blackout_counts=blackout_counts,earliest=local_today()+timedelta(days=14),
         processing=any(c.status in ('queued','preparing','applying') for c in rows))
 
 
@@ -261,7 +268,7 @@ async def decision(request:Request,change_id:int,db=Depends(get_db)):
 
 @router.post('/time-off/blackouts')
 async def save_blackout(request:Request,db=Depends(get_db)):
-    user=actor_for(request,db);form=await request.form(max_fields=100);csrf(request,form.get('csrf'))
+    user=actor_for(request,db,management=True);form=await request.form(max_fields=100);csrf(request,form.get('csrf'))
     feature(db,True);db.refresh(user)
     period=str(form.get('period','all_day'))
     allowed=blackout_stands(db,user)
@@ -270,7 +277,7 @@ async def save_blackout(request:Request,db=Depends(get_db)):
         selected=allowed
     else:
         selected=sorted(set(str(value) for value in form.getlist('locations'))) or [str(form.get('location',''))]
-    if not enabled(db,user) or not selected or any(location not in allowed for location in selected):
+    if not blackout_enabled(db,user) or not selected or any(location not in allowed for location in selected):
         raise HTTPException(403,'Choose a stand you manage.')
     try:
         day=date.fromisoformat(str(form.get('day','')));maximum=int(str(form.get('maximum','')))
