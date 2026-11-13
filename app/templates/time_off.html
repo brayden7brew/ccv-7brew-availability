@@ -4,7 +4,7 @@
 {% if personal_access %}<form class="card" method="post" action="/time-off" data-time-off-form><h2>Request time off</h2><p class="muted">Earliest day: {{ earliest|date_label }}</p><input type="hidden" name="csrf" value="{{ csrf }}"><div class="split"><label><span data-first-day-label>Day</span><input name="first" type="date" min="{{ earliest }}" required></label><label data-time-off-last hidden>Last day<input name="last" type="date" min="{{ earliest }}" disabled></label></div><label class="check"><input type="checkbox" name="multiple_days"> Multiple days</label><label class="check"><input type="checkbox" name="full_day" checked> Full day(s)</label><p class="muted">For a partial day, uncheck Full day(s), use one date, and enter the hours below.</p><div class="split" data-partial-times><label>From<input type="time" name="from" step="900"></label><label>To<input type="time" name="to" step="900"></label></div><label>Reason (required)<textarea name="reason" required maxlength="2000" rows="3"></textarea></label><p class="muted">Your reason is visible to your approving manager. Approved requests are sent to When I Work as unpaid time off.</p><button>Submit request</button></form>{% endif %}
 {% if user.role in ('manager','admin') %}
 <section class="card"><h2>Blackout dates</h2>
-<p class="muted">Request counts are from this portal. Approved includes requests waiting to sync or needing sync review. The cap counts people unavailable, including normal availability and approved When I Work time off.</p>
+<p class="muted">The limit includes regular unavailability and approved time off.</p>
 {% for row in blackouts %}
 <article class="time-off-blackout">
 <strong>{{ row.day|date_label }} · {{ row.location }} · {{ blackout_label(row) }}</strong>
